@@ -23,8 +23,8 @@ from app.schemas.requests import (
     OUTPUT_FORMATS
 )
 
-# El servicio TTS se inyecta desde main.py
-from app.main import tts_service
+# Usar dependencias globales
+from app.dependencies import get_tts_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -64,6 +64,7 @@ async def generate_custom_voice(request: CustomVoiceRequest):
     """
     try:
         start_time = time.time()
+        tts_service = get_tts_service()
         
         # Generar audio
         audio_result = tts_service.generate_custom_voice(
@@ -128,6 +129,7 @@ async def generate_voice_design(request: VoiceDesignRequest):
     """
     try:
         start_time = time.time()
+        tts_service = get_tts_service()
         
         # Generar audio
         audio_result = tts_service.generate_voice_design(
@@ -183,6 +185,7 @@ async def clone_voice_from_url(request: VoiceCloneRequest):
             raise HTTPException(status_code=400, detail="Se requiere ref_audio_url")
         
         start_time = time.time()
+        tts_service = get_tts_service()
         
         # Crear prompt de clonación
         prompt_id = tts_service.create_voice_clone_prompt(
@@ -244,6 +247,7 @@ async def clone_voice_from_upload(
     """
     try:
         start_time = time.time()
+        tts_service = get_tts_service()
         
         # Validar formato del archivo
         allowed_types = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/ogg"]
@@ -309,6 +313,7 @@ async def get_models_info():
     Retorna información de modelos y configuración.
     """
     import torch
+    import os
     
     gpu_info = None
     if torch.cuda.is_available():
@@ -329,7 +334,7 @@ async def get_models_info():
         },
         available_speakers=AVAILABLE_SPEAKERS,
         supported_languages=SUPPORTED_LANGUAGES,
-        loaded_models=tts_service.get_loaded_models() if tts_service else [],
+        loaded_models=get_tts_service().get_loaded_models(),
         cuda_available=torch.cuda.is_available(),
         gpu_info=gpu_info
     )
@@ -395,6 +400,7 @@ async def generate_custom_voice_file(request: CustomVoiceRequest):
     """
     try:
         start_time = time.time()
+        tts_service = get_tts_service()
         
         # Generar audio
         audio_result = tts_service.generate_custom_voice(
