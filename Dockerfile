@@ -59,7 +59,7 @@ RUN python3.10 -m pip install --no-cache-dir \
     torch==2.5.1 \
     torchaudio==2.5.1 \
     soundfile==0.12.1 \
-    accelerate==1.0.0 \
+    accelerate==1.12.0 \
     numpy==1.26.4 \
     aiofiles==24.1.0 \
     httpx==0.27.2 \
