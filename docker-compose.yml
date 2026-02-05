@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  qwen3-tts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: qwen3-tts-service:latest
+    container_name: qwen3-tts-api
+    ports:
+      - "8000:8000"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - MODEL_CACHE_DIR=/app/models
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=info
+      - DEFAULT_MODEL_SIZE=1.7B
+      - USE_FLASH_ATTENTION=true
+      - MAX_AUDIO_LENGTH_SECONDS=30
+    volumes:
+      - ./models:/app/models
+      - ./output:/app/output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python3.10", "-c", "import requests; requests.get('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - tts-network
+
+  # Optional: Add a simple web UI for testing
+  tts-webui:
+    image: nginx:alpine
+    container_name: qwen3-tts-webui
+    ports:
+      - "8080:80"
+    volumes:
+      - ./webui:/usr/share/nginx/html:ro
+    depends_on:
+      - qwen3-tts
+    networks:
+      - tts-network
+    profiles:
+      - with-ui
+
+networks:
+  tts-network:
+    driver: bridge
+
+volumes:
+  models:
+  output:
