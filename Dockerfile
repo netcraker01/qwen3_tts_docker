@@ -49,6 +49,9 @@ WORKDIR /app
 # Copy requirements first for better caching
 COPY requirements.txt .
 
+# Install numpy first (required by sox)
+RUN python3.10 -m pip install --no-cache-dir numpy==1.26.4
+
 # Install Python dependencies (except flash-attn)
 RUN python3.10 -m pip install --no-cache-dir \
     fastapi==0.115.0 \
@@ -60,7 +63,6 @@ RUN python3.10 -m pip install --no-cache-dir \
     torchaudio==2.5.1 \
     soundfile==0.12.1 \
     accelerate==1.12.0 \
-    numpy==1.26.4 \
     aiofiles==24.1.0 \
     httpx==0.27.2 \
     pydub==0.25.1
