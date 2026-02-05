@@ -65,7 +65,8 @@ class TTSService:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.default_model_size = default_model_size
-        self.use_flash_attention = use_flash_attention and torch.cuda.is_available()
+        # Flash attention requiere compilación con nvcc, deshabilitado por defecto
+        self.use_flash_attention = False  # use_flash_attention and torch.cuda.is_available()
         
         # Cache de modelos cargados
         self._models: Dict[str, Any] = {}
