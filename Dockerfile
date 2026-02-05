@@ -47,8 +47,31 @@ WORKDIR /app
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN python3.10 -m pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies (except flash-attn)
+RUN python3.10 -m pip install --no-cache-dir \
+    fastapi==0.115.0 \
+    uvicorn[standard]==0.32.0 \
+    pydantic==2.9.0 \
+    python-multipart==0.0.17 \
+    qwen-tts==0.1.0 \
+    torch==2.5.1 \
+    torchaudio==2.5.1 \
+    soundfile==0.12.1 \
+    accelerate==1.0.0 \
+    numpy==1.26.4 \
+    aiofiles==24.1.0 \
+    httpx==0.27.2 \
+    pydub==0.25.1
+
+# Install flash-attn with proper build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3.10-dev \
+    git \
+    && pip install --no-cache-dir flash-attn==2.7.4.post1 \
+    && apt-get remove -y build-essential python3.10-dev git \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
 COPY app/ ./app/
