@@ -1,5 +1,5 @@
 # Multi-stage build for Qwen3-TTS Service
-FROM nvidia/cuda:12.1-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 AS builder
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3.10 -m pip install --upgrade pip setuptools wheel
 
 # Production stage
-FROM nvidia/cuda:12.1-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
