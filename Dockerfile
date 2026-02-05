@@ -49,8 +49,8 @@ WORKDIR /app
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install numpy first (required by sox)
-RUN python3.10 -m pip install --no-cache-dir numpy==1.26.4
+# Install numpy and typing_extensions first (required by sox)
+RUN python3.10 -m pip install --no-cache-dir numpy==1.26.4 typing_extensions
 
 # Install Python dependencies (except flash-attn)
 RUN python3.10 -m pip install --no-cache-dir \
