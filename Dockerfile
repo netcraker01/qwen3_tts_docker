@@ -31,13 +31,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MODEL_CACHE_DIR=/app/models \
     CUDA_VISIBLE_DEVICES=0
 
-# Install runtime dependencies
+# Install runtime dependencies (incluyendo sox binario)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
     python3-pip \
     libsndfile1 \
     libsndfile1-dev \
     ffmpeg \
+    sox \
+    libsox-fmt-all \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
