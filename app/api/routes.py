@@ -17,11 +17,17 @@ from app.schemas.requests import (
     VoiceCloneFromFileRequest,
     TTSResponse,
     ModelsInfoResponse,
+    CreateClonedVoiceRequest,
+    UpdateClonedVoiceRequest,
+    ClonedVoiceListResponse,
+    GenerateFromClonedVoiceRequest,
     AVAILABLE_SPEAKERS,
     SUPPORTED_LANGUAGES,
     MODEL_SIZES,
     OUTPUT_FORMATS
 )
+
+from app.services.voice_manager import VoiceManager
 
 # Usar dependencias globales
 from app.dependencies import get_tts_service
@@ -461,3 +467,248 @@ async def download_file(filename: str):
         filename=filename,
         media_type="audio/wav" if filename.endswith(".wav") else "audio/mpeg"
     )
+
+
+# ============================================================
+# ENDPOINTS - GESTIÓN DE VOCES CLONADAS PERSISTENTES
+# ============================================================
+
+# Instancia global del VoiceManager
+voice_manager = VoiceManager(storage_dir="/app/data")
+
+
+@router.post(
+    "/cloned-voices",
+    response_model=dict,
+    summary="Crear voz clonada persistente",
+    description="""
+    Crea una voz clonada y la guarda para uso futuro.
+    La voz se almacena en disco y puede reusarse múltiples veces.
+    """,
+    tags=["Cloned Voices Management"]
+)
+async def create_cloned_voice(request: CreateClonedVoiceRequest):
+    """
+    Crea una voz clonada persistente desde URL de audio.
+    """
+    try:
+        tts_service = get_tts_service()
+        
+        # Crear el prompt de clonación
+        prompt_id = tts_service.create_voice_clone_prompt(
+            ref_audio_path=request.ref_audio_url,
+            ref_text=request.ref_text
+        )
+        
+        # Obtener el objeto prompt real del servicio
+        prompt_data = tts_service._voice_clone_prompts.get(prompt_id)
+        
+        if not prompt_data:
+            raise HTTPException(status_code=500, detail="No se pudo crear el prompt de voz")
+        
+        # Guardar en el VoiceManager
+        voice = voice_manager.create_voice(
+            name=request.name,
+            description=request.description,
+            ref_audio_path=request.ref_audio_url,
+            ref_text=request.ref_text,
+            language=request.language,
+            prompt_data=prompt_data
+        )
+        
+        return {
+            "success": True,
+            "voice": voice.to_dict(),
+            "message": f"Voz '{request.name}' creada exitosamente. Use el ID '{voice.id}' para generar audio."
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creando voz clonada: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/cloned-voices",
+    response_model=dict,
+    summary="Listar voces clonadas",
+    description="Obtiene la lista de todas las voces clonadas almacenadas.",
+    tags=["Cloned Voices Management"]
+)
+async def list_cloned_voices():
+    """
+    Lista todas las voces clonadas guardadas.
+    """
+    voices = voice_manager.list_voices()
+    return {
+        "voices": voices,
+        "total": len(voices)
+    }
+
+
+@router.get(
+    "/cloned-voices/{voice_id}",
+    response_model=dict,
+    summary="Obtener información de una voz clonada",
+    description="Obtiene los detalles de una voz clonada específica.",
+    tags=["Cloned Voices Management"]
+)
+async def get_cloned_voice(voice_id: str):
+    """
+    Obtiene información de una voz clonada.
+    """
+    voice = voice_manager.get_voice(voice_id)
+    if not voice:
+        raise HTTPException(status_code=404, detail=f"Voz no encontrada: {voice_id}")
+    
+    return {
+        "voice": voice.to_dict()
+    }
+
+
+@router.put(
+    "/cloned-voices/{voice_id}",
+    response_model=dict,
+    summary="Actualizar voz clonada",
+    description="Actualiza el nombre o descripción de una voz clonada.",
+    tags=["Cloned Voices Management"]
+)
+async def update_cloned_voice(voice_id: str, request: UpdateClonedVoiceRequest):
+    """
+    Actualiza información de una voz clonada.
+    """
+    voice = voice_manager.update_voice(
+        voice_id=voice_id,
+        name=request.name,
+        description=request.description
+    )
+    
+    if not voice:
+        raise HTTPException(status_code=404, detail=f"Voz no encontrada: {voice_id}")
+    
+    return {
+        "success": True,
+        "voice": voice.to_dict(),
+        "message": "Voz actualizada exitosamente"
+    }
+
+
+@router.delete(
+    "/cloned-voices/{voice_id}",
+    response_model=dict,
+    summary="Eliminar voz clonada",
+    description="Elimina permanentemente una voz clonada almacenada.",
+    tags=["Cloned Voices Management"]
+)
+async def delete_cloned_voice(voice_id: str):
+    """
+    Elimina una voz clonada.
+    """
+    deleted = voice_manager.delete_voice(voice_id)
+    
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Voz no encontrada: {voice_id}")
+    
+    return {
+        "success": True,
+        "message": f"Voz '{voice_id}' eliminada exitosamente"
+    }
+
+
+@router.post(
+    "/tts/cloned-voice/generate",
+    response_model=TTSResponse,
+    summary="Generar audio usando voz clonada guardada",
+    description="""
+    Genera audio de texto usando una voz clonada previamente guardada.
+    Es más rápido que crear el clone desde cero cada vez.
+    """,
+    tags=["Cloned Voices Management"]
+)
+async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
+    """
+    Genera audio usando una voz clonada almacenada.
+    """
+    try:
+        start_time = time.time()
+        tts_service = get_tts_service()
+        
+        # Obtener la voz y su prompt
+        voice = voice_manager.get_voice(request.voice_id)
+        if not voice:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Voz clonada no encontrada: {request.voice_id}. "
+                       f"Cree la voz primero con POST /cloned-voices"
+            )
+        
+        prompt_data = voice_manager.get_prompt(request.voice_id)
+        if not prompt_data:
+            raise HTTPException(
+                status_code=500,
+                detail="Prompt de voz no disponible en memoria. Es posible que el servidor se haya reiniciado. Recree la voz."
+            )
+        
+        # Usar el idioma de la voz si no se especificó otro
+        language = request.language or voice.language
+        
+        # Cargar modelo voice_clone si es necesario
+        model = tts_service._get_model("voice_clone")
+        
+        # Generar audio directamente con el prompt guardado
+        wavs, sr = model.generate_voice_clone(
+            text=request.text,
+            language=language,
+            voice_clone_prompt=prompt_data
+        )
+        
+        audio_data = wavs[0]
+        duration = len(audio_data) / sr
+        
+        # Crear AudioResult
+        from app.services.tts_service import AudioResult
+        audio_result = AudioResult(
+            audio_data=audio_data,
+            sample_rate=sr,
+            duration_seconds=duration,
+            model_used="1.7B_cloned_voice_reused"
+        )
+        
+        # Convertir a base64
+        audio_base64 = tts_service.audio_to_base64(audio_result, request.output_format)
+        
+        processing_time = time.time() - start_time
+        
+        return TTSResponse(
+            success=True,
+            audio_base64=audio_base64,
+            sample_rate=audio_result.sample_rate,
+            duration_seconds=audio_result.duration_seconds,
+            model_used=audio_result.model_used,
+            processing_time_seconds=processing_time
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generando desde voz clonada: {e}")
+        return TTSResponse(
+            success=False,
+            error=str(e),
+            model_used="cloned_voice_reused",
+            processing_time_seconds=0
+        )
+
+
+@router.get(
+    "/cloned-voices/stats",
+    response_model=dict,
+    summary="Estadísticas de voces clonadas",
+    description="Obtiene estadísticas de uso de las voces clonadas.",
+    tags=["Cloned Voices Management"]
+)
+async def get_cloned_voices_stats():
+    """
+    Obtiene estadísticas de las voces clonadas.
+    """
+    stats = voice_manager.get_voice_stats()
+    return stats

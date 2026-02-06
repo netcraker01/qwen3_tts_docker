@@ -2,7 +2,7 @@
 Pydantic models for API requests and responses.
 """
 
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from pydantic import BaseModel, Field, validator
 
 # ============================================================
@@ -266,3 +266,48 @@ class HealthResponse(BaseModel):
     version: str = Field(description="Versión del servicio")
     cuda_available: bool = Field(description="Si CUDA está disponible")
     models_loaded: list = Field(description="Modelos cargados en memoria")
+
+
+# ============================================================
+# SCHEMAS - GESTIÓN DE VOCES CLONADAS PERSISTENTES
+# ============================================================
+
+class CreateClonedVoiceRequest(BaseModel):
+    """Request para crear una voz clonada persistente."""
+    name: str = Field(..., min_length=1, max_length=50, description="Nombre identificativo de la voz")
+    description: str = Field(default="", max_length=200, description="Descripción de la voz")
+    ref_audio_url: str = Field(..., description="URL del audio de referencia")
+    ref_text: str = Field(..., min_length=1, description="Texto correspondiente al audio de referencia")
+    language: str = Field(default="Spanish", description="Idioma principal de la voz")
+
+
+class UpdateClonedVoiceRequest(BaseModel):
+    """Request para actualizar una voz clonada."""
+    name: Optional[str] = Field(None, min_length=1, max_length=50)
+    description: Optional[str] = Field(None, max_length=200)
+
+
+class ClonedVoiceInfo(BaseModel):
+    """Información de una voz clonada."""
+    id: str
+    name: str
+    description: str
+    ref_text: str
+    language: str
+    created_at: str
+    last_used: str
+    use_count: int
+
+
+class ClonedVoiceListResponse(BaseModel):
+    """Respuesta con lista de voces clonadas."""
+    voices: List[ClonedVoiceInfo]
+    total: int
+
+
+class GenerateFromClonedVoiceRequest(BaseModel):
+    """Request para generar audio usando una voz clonada guardada."""
+    text: str = Field(..., min_length=1, description="Texto a convertir")
+    voice_id: str = Field(..., description="ID de la voz clonada a usar")
+    language: Optional[str] = Field(None, description="Idioma (opcional, usa el de la voz por defecto)")
+    output_format: str = Field(default="wav", description="Formato de salida")

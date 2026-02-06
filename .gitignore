@@ -178,3 +178,5 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+# Datos persistentes de voces clonadas
+data/*.json
