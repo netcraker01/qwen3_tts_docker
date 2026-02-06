@@ -7,9 +7,10 @@ import logging
 from contextlib import asynccontextmanager
 
 import torch
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 # Configuración de logging
 logging.basicConfig(
@@ -115,6 +116,26 @@ async def global_exception_handler(request, exc):
     return JSONResponse(
         status_code=500,
         content={"detail": "Error interno del servidor", "error": str(exc)}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Manejador personalizado para errores de validación."""
+    # Convertir errores a strings para evitar problemas de serialización con bytes
+    errors = []
+    for error in exc.errors():
+        error_dict = {}
+        for key, value in error.items():
+            if isinstance(value, bytes):
+                error_dict[key] = f"<binary: {len(value)} bytes>"
+            else:
+                error_dict[key] = str(value) if not isinstance(value, (str, int, float, bool, list, dict, type(None))) else value
+        errors.append(error_dict)
+    
+    return JSONResponse(
+        status_code=422,
+        content={"detail": errors}
     )
 
 
