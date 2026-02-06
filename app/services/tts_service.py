@@ -738,31 +738,59 @@ class TTSService:
     
     def audio_to_base64(self, audio_result: AudioResult, output_format: str = "wav") -> str:
         """
-        Convierte AudioResult a string base64.
+        Convierte AudioResult a string base64 con formatos compatibles WhatsApp.
         
         Args:
             audio_result: Resultado de generación
-            output_format: Formato de salida (wav, mp3, ogg)
+            output_format: Formato de salida (wav, mp3, ogg, opus)
         
         Returns:
             Audio codificado en base64
         """
-        # Crear buffer en memoria
-        buffer = io.BytesIO()
+        # Crear buffer temporal con WAV original
+        wav_buffer = io.BytesIO()
+        sf.write(wav_buffer, audio_result.audio_data, audio_result.sample_rate, format="WAV")
+        wav_buffer.seek(0)
         
-        # Escribir audio
-        sf.write(buffer, audio_result.audio_data, audio_result.sample_rate, format=output_format)
-        buffer.seek(0)
+        # Cargar con pydub para conversión
+        audio = AudioSegment.from_wav(wav_buffer)
         
-        # Convertir a formato solicitado si es necesario
-        if output_format != "wav":
-            audio = AudioSegment.from_wav(buffer)
-            buffer = io.BytesIO()
-            audio.export(buffer, format=output_format)
-            buffer.seek(0)
+        # Asegurar mono para compatibilidad WhatsApp
+        if audio.channels > 1:
+            audio = audio.set_channels(1)
+        
+        # WhatsApp prefiere 16kHz o 24kHz
+        target_sample_rate = 24000 if audio_result.sample_rate >= 24000 else 16000
+        if audio.frame_rate != target_sample_rate:
+            audio = audio.set_frame_rate(target_sample_rate)
+        
+        # Exportar al formato solicitado con parámetros optimizados para WhatsApp
+        output_buffer = io.BytesIO()
+        
+        if output_format.lower() == "mp3":
+            # MP3 mono, 24kHz, buena calidad para voz
+            audio.export(
+                output_buffer,
+                format="mp3",
+                codec="libmp3lame",
+                parameters=["-ar", str(target_sample_rate), "-ac", "1", "-b:a", "128k"]
+            )
+        elif output_format.lower() in ["ogg", "opus"]:
+            # OGG con Opus - formato nativo de WhatsApp
+            audio.export(
+                output_buffer,
+                format="ogg",
+                codec="libopus",
+                parameters=["-ar", str(target_sample_rate), "-ac", "1", "-b:a", "24k"]
+            )
+        else:
+            # WAV - mantener como PCM
+            audio.export(output_buffer, format="wav")
+        
+        output_buffer.seek(0)
         
         # Codificar en base64
-        audio_bytes = buffer.getvalue()
+        audio_bytes = output_buffer.getvalue()
         return base64.b64encode(audio_bytes).decode('utf-8')
     
     def save_audio(

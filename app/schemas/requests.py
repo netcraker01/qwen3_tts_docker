@@ -21,7 +21,7 @@ AVAILABLE_SPEAKERS = [
 
 MODEL_SIZES = ["0.6B", "1.7B"]
 
-OUTPUT_FORMATS = ["wav", "mp3", "ogg"]
+OUTPUT_FORMATS = ["wav", "mp3", "ogg", "opus"]
 
 # ============================================================
 # REQUESTS - CUSTOM VOICE
