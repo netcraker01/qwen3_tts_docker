@@ -181,9 +181,17 @@ curl -X POST "http://localhost:8080/api/v1/tts/custom" \
     "speaker": "Ryan",
     "language": "English",
     "instruction": "Clear and professional",
-    "output_format": "wav"
+    "output_format": "ogg"
   }'
 ```
+
+**📱 Para WhatsApp, usar formato `ogg` o `opus`:**
+- ✅ Formato nativo de WhatsApp (Opus en contenedor OGG)
+- ✅ Archivos pequeños (~20-30KB para mensajes de 2-3 segundos)
+- ✅ Máxima compatibilidad con todos los clientes de WhatsApp
+- ✅ Calidad óptima para voz a 24kHz mono
+
+**Formatos soportados:** `wav`, `mp3`, `ogg`, `opus`
 
 **Respuesta exitosa:**
 ```json
