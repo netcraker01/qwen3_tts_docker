@@ -75,7 +75,7 @@ ls -la
 
 ```bash
 # Crear directorios necesarios (si no existen)
-mkdir -p models output
+mkdir -p models output data
 
 # Verificar estructura
 tree -L 2
@@ -89,6 +89,7 @@ qwen3_tts_docker/
 ├── app/              # Código fuente
 ├── models/           # Cache de modelos (volumen)
 ├── output/           # Archivos generados (volumen)
+├── data/             # Voces clonadas persistentes (volumen)
 ├── docker-compose.yml
 ├── Dockerfile
 └── README.md
@@ -298,19 +299,19 @@ El sistema permite crear, almacenar y reusar voces clonadas para generación rá
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
-| `/cloned-voices` | POST | Crear nueva voz clonada persistente |
-| `/cloned-voices` | GET | Listar todas las voces clonadas |
-| `/cloned-voices/{id}` | GET | Obtener información de una voz |
-| `/cloned-voices/{id}` | PUT | Actualizar nombre/descripción |
-| `/cloned-voices/{id}` | DELETE | Eliminar voz clonada |
-| `/cloned-voices/stats` | GET | Estadísticas de uso |
-| `/tts/cloned-voice/generate` | POST | Generar audio usando voz guardada |
+| `/api/v1/cloned-voices` | POST | Crear nueva voz clonada persistente |
+| `/api/v1/cloned-voices` | GET | Listar todas las voces clonadas |
+| `/api/v1/cloned-voices/{id}` | GET | Obtener información de una voz |
+| `/api/v1/cloned-voices/{id}` | PUT | Actualizar nombre/descripción |
+| `/api/v1/cloned-voices/{id}` | DELETE | Eliminar voz clonada |
+| `/api/v1/cloned-voices/stats` | GET | Estadísticas de uso |
+| `/api/v1/tts/cloned-voice/generate` | POST | Generar audio usando voz guardada |
 
 ### Ejemplo: Crear y Usar Voz Clonada
 
 **1. Crear voz clonada:**
 ```bash
-curl -X POST "http://localhost:8080/cloned-voices" \
+curl -X POST "http://localhost:8080/api/v1/cloned-voices" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Mi Voz Personal",
@@ -341,7 +342,7 @@ curl -X POST "http://localhost:8080/cloned-voices" \
 
 **2. Generar audio usando la voz guardada:**
 ```bash
-curl -X POST "http://localhost:8080/tts/cloned-voice/generate" \
+curl -X POST "http://localhost:8080/api/v1/tts/cloned-voice/generate" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Este es un mensaje usando mi voz clonada guardada",
@@ -414,6 +415,7 @@ qwen3-tts-service/
 │   └── main.py                # Entry point FastAPI
 ├── models/                    # Caché de modelos (volumen)
 ├── output/                    # Archivos generados (volumen)
+├── data/                      # Voces clonadas persistentes (volumen)
 ├── Dockerfile                 # Imagen Docker
 ├── docker-compose.yml         # Orquestación
 ├── download_models.py         # Script descarga manual
