@@ -413,22 +413,34 @@ class TTSService:
         self._models: Dict[str, Any] = {}
         self._voice_clone_prompts: Dict[str, Any] = {}
         
-        # Configuración de device - optimizaciones para velocidad
+        # Configuración de device - optimizaciones para velocidad máxima
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        # Usar float16 en lugar de bfloat16 para más velocidad en RTX 3060 (Ampere)
+        # Usar float16 para máxima velocidad en RTX 3060/3060Ti 12GB
         self.dtype = torch.float16 if self.device == "cuda" else torch.float32
         
-        # Optimizaciones de PyTorch
+        # Optimizaciones de PyTorch para máximo rendimiento
         if self.device == "cuda":
             # Habilitar cudnn benchmarking para operaciones más rápidas
             torch.backends.cudnn.benchmark = True
             # Permitir operaciones TF32 para más velocidad en Ampere+
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
+            # Optimizaciones adicionales de memoria
+            torch.backends.cuda.sdp_kernel(
+                enable_flash=True,
+                enable_math=True,
+                enable_mem_efficient=True
+            )
+        
+        # Pool de workers para procesamiento paralelo de I/O
+        self._executor = None
+        self._batch_queue = []
+        self._batch_size = 4  # Procesar hasta 4 requests en batch
         
         logger.info(f"TTSService inicializado - Device: {self.device}, Dtype: {self.dtype}")
         logger.info(f"Flash Attention: {self.use_flash_attention}")
         logger.info(f"Cache dir: {self.cache_dir}")
+        logger.info(f"Batch size: {self._batch_size}")
     
     def _get_model(self, model_type: str, model_size: Optional[str] = None, force_reload: bool = False) -> Any:
         """
