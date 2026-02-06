@@ -10,7 +10,7 @@ services:
       - "8080:8000"
     environment:
       - CUDA_VISIBLE_DEVICES=0
-      - MODEL_CACHE_DIR=/app/models
+      - HF_HOME=/app/models
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=info
       - DEFAULT_MODEL_SIZE=1.7B
