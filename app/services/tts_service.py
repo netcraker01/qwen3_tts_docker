@@ -750,27 +750,41 @@ class TTSService:
         import tempfile
         import os
         
-        # Crear archivo temporal para el resultado
-        with tempfile.NamedTemporaryFile(suffix=f".{output_format}", delete=False) as tmp:
-            tmp_path = tmp.name
+        # Guardar audio original a archivo temporal WAV
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
+            sf.write(tmp_wav.name, audio_result.audio_data, audio_result.sample_rate)
+            tmp_wav_path = tmp_wav.name
         
         try:
-            # Usar el método save_audio existente que funciona
-            final_path = self.save_audio(audio_result, tmp_path, output_format)
+            if output_format.lower() == "wav":
+                # Leer el archivo WAV directamente
+                with open(tmp_wav_path, 'rb') as f:
+                    audio_bytes = f.read()
+                return base64.b64encode(audio_bytes).decode('utf-8')
             
-            # Leer el archivo generado
-            with open(final_path, 'rb') as f:
+            # Para otros formatos, convertir
+            audio = AudioSegment.from_wav(tmp_wav_path)
+            
+            # Crear archivo temporal para el formato de salida
+            with tempfile.NamedTemporaryFile(suffix=f".{output_format}", delete=False) as tmp_out:
+                tmp_out_path = tmp_out.name
+            
+            # Exportar al formato solicitado
+            audio.export(tmp_out_path, format=output_format)
+            
+            # Leer el archivo convertido
+            with open(tmp_out_path, 'rb') as f:
                 audio_bytes = f.read()
             
-            # Codificar en base64
+            # Limpiar archivo de salida
+            os.remove(tmp_out_path)
+            
             return base64.b64encode(audio_bytes).decode('utf-8')
             
         finally:
-            # Limpiar archivos temporales
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-            if os.path.exists(final_path) and final_path != tmp_path:
-                os.remove(final_path)
+            # Limpiar archivo WAV temporal
+            if os.path.exists(tmp_wav_path):
+                os.remove(tmp_wav_path)
     
     def save_audio(
         self,
