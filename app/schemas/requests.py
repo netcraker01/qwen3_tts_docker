@@ -247,7 +247,7 @@ class ModelsInfoResponse(BaseModel):
     """
     Response con información de modelos disponibles.
     """
-    available_models: list = Field(description="Lista de modelos disponibles")
+    available_models: dict = Field(description="Diccionario de modelos disponibles por tamaño")
     available_speakers: list = Field(description="Lista de speakers preestablecidos")
     supported_languages: list = Field(description="Lista de idiomas soportados")
     loaded_models: list = Field(description="Modelos actualmente cargados en memoria")
