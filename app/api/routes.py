@@ -7,7 +7,7 @@ import time
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Request
 from fastapi.responses import JSONResponse, FileResponse
 
 from app.schemas.requests import (
@@ -242,6 +242,7 @@ async def clone_voice_from_url(request: VoiceCloneRequest):
     tags=["Voice Cloning"]
 )
 async def clone_voice_from_upload(
+    request: Request,
     text: str = Form(..., description="Texto a convertir"),
     ref_text: str = Form(..., description="Texto del audio de referencia"),
     language: str = Form(default="Spanish", description="Idioma del texto"),
@@ -255,19 +256,18 @@ async def clone_voice_from_upload(
         start_time = time.time()
         tts_service = get_tts_service()
         
-        # Validar formato del archivo
-        allowed_types = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/ogg"]
-        if ref_audio.content_type not in allowed_types:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Formato no soportado: {ref_audio.content_type}. Use WAV, MP3 u OGG."
-            )
+        logger.info(f"Recibiendo archivo: {ref_audio.filename}, content-type: {ref_audio.content_type}")
         
         # Leer contenido del archivo
         audio_content = await ref_audio.read()
+        file_size = len(audio_content)
+        logger.info(f"Archivo leído: {file_size} bytes")
         
-        if len(audio_content) > 10 * 1024 * 1024:  # 10MB max
+        if file_size > 10 * 1024 * 1024:  # 10MB max
             raise HTTPException(status_code=400, detail="Archivo demasiado grande (max 10MB)")
+        
+        if file_size == 0:
+            raise HTTPException(status_code=400, detail="Archivo vacío")
         
         # Generar audio clonado (con liberación automática de memoria)
         audio_result = tts_service.generate_voice_clone_from_file(
@@ -295,6 +295,8 @@ async def clone_voice_from_upload(
         raise
     except Exception as e:
         logger.error(f"Error en voice clone upload: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return TTSResponse(
             success=False,
             error=str(e),
