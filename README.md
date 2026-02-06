@@ -290,6 +290,72 @@ $response = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/tts/custom" -Me
 [System.Convert]::FromBase64String($response.audio_base64) | Set-Content -Path "mensaje.ogg" -Encoding Byte
 ```
 
+## 🗣️ Gestión de Voces Clonadas Persistentes
+
+El sistema permite crear, almacenar y reusar voces clonadas para generación rápida de audio.
+
+### Endpoints de Gestión
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/cloned-voices` | POST | Crear nueva voz clonada persistente |
+| `/cloned-voices` | GET | Listar todas las voces clonadas |
+| `/cloned-voices/{id}` | GET | Obtener información de una voz |
+| `/cloned-voices/{id}` | PUT | Actualizar nombre/descripción |
+| `/cloned-voices/{id}` | DELETE | Eliminar voz clonada |
+| `/cloned-voices/stats` | GET | Estadísticas de uso |
+| `/tts/cloned-voice/generate` | POST | Generar audio usando voz guardada |
+
+### Ejemplo: Crear y Usar Voz Clonada
+
+**1. Crear voz clonada:**
+```bash
+curl -X POST "http://localhost:8080/cloned-voices" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Mi Voz Personal",
+    "description": "Voz clonada de mi audio de referencia",
+    "ref_audio_url": "https://ejemplo.com/mi-voz.wav",
+    "ref_text": "Hola, esta es mi voz de referencia para clonación",
+    "language": "Spanish"
+  }'
+```
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "voice": {
+    "id": "mi_voz_personal_1704567890",
+    "name": "Mi Voz Personal",
+    "description": "Voz clonada de mi audio de referencia",
+    "ref_text": "Hola, esta es mi voz de referencia...",
+    "language": "Spanish",
+    "created_at": "2024-01-06 15:30:45",
+    "last_used": "2024-01-06 15:30:45",
+    "use_count": 0
+  },
+  "message": "Voz 'Mi Voz Personal' creada exitosamente. Use el ID 'mi_voz_personal_1704567890' para generar audio."
+}
+```
+
+**2. Generar audio usando la voz guardada:**
+```bash
+curl -X POST "http://localhost:8080/tts/cloned-voice/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Este es un mensaje usando mi voz clonada guardada",
+    "voice_id": "mi_voz_personal_1704567890",
+    "output_format": "ogg"
+  }'
+```
+
+**Ventajas de usar voces persistentes:**
+- ⚡ **Mucho más rápido**: No requiere reprocesar el audio de referencia
+- 💾 **Persistente**: Las voces sobreviven reinicios del servidor
+- 📊 **Estadísticas**: Seguimiento de uso de cada voz
+- 🔧 **Editable**: Puedes renombrar y modificar descripciones
+
 ## 🎭 Speakers Disponibles
 
 | Speaker | Género | Idioma | Estilo |
