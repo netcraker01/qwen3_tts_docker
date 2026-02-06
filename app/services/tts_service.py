@@ -748,43 +748,71 @@ class TTSService:
             Audio codificado en base64
         """
         import tempfile
-        import os
+        import subprocess
+        import numpy as np
         
-        # Guardar audio original a archivo temporal WAV
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
-            sf.write(tmp_wav.name, audio_result.audio_data, audio_result.sample_rate)
-            tmp_wav_path = tmp_wav.name
+        # Asegurar que los datos estén en el rango correcto
+        audio_data = audio_result.audio_data
+        if audio_data.dtype != np.int16:
+            # Convertir a int16 si es necesario
+            if audio_data.max() <= 1.0:
+                audio_data = (audio_data * 32767).astype(np.int16)
+            else:
+                audio_data = audio_data.astype(np.int16)
+        
+        # Crear archivo temporal para salida
+        with tempfile.NamedTemporaryFile(suffix=f".{output_format}", delete=False) as tmp:
+            output_path = tmp.name
         
         try:
             if output_format.lower() == "wav":
-                # Leer el archivo WAV directamente
-                with open(tmp_wav_path, 'rb') as f:
-                    audio_bytes = f.read()
-                return base64.b64encode(audio_bytes).decode('utf-8')
+                # Guardar directamente como WAV
+                sf.write(output_path, audio_data, audio_result.sample_rate, subtype='PCM_16')
+                with open(output_path, 'rb') as f:
+                    return base64.b64encode(f.read()).decode('utf-8')
             
-            # Para otros formatos, convertir
-            audio = AudioSegment.from_wav(tmp_wav_path)
+            # Para otros formatos, usar ffmpeg desde raw PCM
+            # Primero guardar como raw PCM
+            raw_path = output_path + ".raw"
+            audio_data.tofile(raw_path)
             
-            # Crear archivo temporal para el formato de salida
-            with tempfile.NamedTemporaryFile(suffix=f".{output_format}", delete=False) as tmp_out:
-                tmp_out_path = tmp_out.name
+            # Usar ffmpeg para convertir desde raw PCM
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "s16le",  # Formato: signed 16-bit little endian
+                "-ar", str(audio_result.sample_rate),  # Sample rate
+                "-ac", "1",  # Mono
+                "-i", raw_path,  # Input
+                "-ar", "24000",  # Resample a 24kHz
+                "-ac", "1"  # Asegurar mono
+            ]
             
-            # Exportar al formato solicitado
-            audio.export(tmp_out_path, format=output_format)
+            if output_format.lower() == "mp3":
+                cmd.extend(["-b:a", "128k", output_path])
+            elif output_format.lower() in ["ogg", "opus"]:
+                cmd.extend(["-c:a", "libopus", "-b:a", "24k", output_path])
+            else:
+                cmd.extend([output_path])
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            # Limpiar archivo raw
+            os.remove(raw_path)
+            
+            if result.returncode != 0:
+                logger.error(f"ffmpeg error: {result.stderr}")
+                raise RuntimeError(f"ffmpeg conversion failed: {result.stderr[:200]}")
             
             # Leer el archivo convertido
-            with open(tmp_out_path, 'rb') as f:
+            with open(output_path, 'rb') as f:
                 audio_bytes = f.read()
-            
-            # Limpiar archivo de salida
-            os.remove(tmp_out_path)
             
             return base64.b64encode(audio_bytes).decode('utf-8')
             
         finally:
-            # Limpiar archivo WAV temporal
-            if os.path.exists(tmp_wav_path):
-                os.remove(tmp_wav_path)
+            # Limpiar archivo de salida si existe
+            if os.path.exists(output_path):
+                os.remove(output_path)
     
     def save_audio(
         self,
