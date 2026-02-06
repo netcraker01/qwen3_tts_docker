@@ -242,6 +242,54 @@ curl -X POST "http://localhost:8080/api/v1/tts/clone/upload" \
   -F "ref_audio=@/ruta/a/mi-voz.wav"
 ```
 
+## 🎵 Formatos de Audio
+
+La API soporta múltiples formatos de salida configurables mediante el parámetro `output_format`.
+
+### Formatos Disponibles
+
+| Formato | Extensión | Tamaño | Uso Recomendado |
+|---------|-----------|--------|-----------------|
+| **OGG** | `.ogg` | ~20-30KB | **WhatsApp** - Formato nativo (Opus) |
+| **OPUS** | `.opus` | ~20-30KB | **WhatsApp** - Codec Opus explícito |
+| **MP3** | `.mp3` | ~40-60KB | Compatibilidad universal |
+| **WAV** | `.wav` | ~200-400KB | Máxima calidad, sin compresión |
+
+### 📱 Guía para WhatsApp
+
+Para enviar mensajes de voz por WhatsApp, se recomienda usar **OGG** o **OPUS**:
+
+**Características:**
+- ✅ Formato nativo de WhatsApp (contenedor OGG con codec Opus)
+- ✅ Archivos pequeños (~20-30KB para mensajes de 2-3 segundos)
+- ✅ Máxima compatibilidad con todos los clientes de WhatsApp
+- ✅ Calidad óptima para voz a 24kHz mono
+
+**Ejemplo para WhatsApp:**
+```bash
+curl -X POST "http://localhost:8080/api/v1/tts/custom" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hola, este es un mensaje de WhatsApp",
+    "speaker": "Ryan",
+    "language": "Spanish",
+    "output_format": "ogg"
+  }'
+```
+
+**Decodificar Base64 a archivo:**
+```bash
+# Linux/Mac
+curl -X POST "http://localhost:8080/api/v1/tts/custom" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hola WhatsApp","speaker":"Ryan","language":"Spanish","output_format":"ogg"}' | \
+  jq -r '.audio_base64' | base64 -d > mensaje.ogg
+
+# Windows (PowerShell)
+$response = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/tts/custom" -Method Post -ContentType "application/json" -Body '{"text":"Hola WhatsApp","speaker":"Ryan","language":"Spanish","output_format":"ogg"}'
+[System.Convert]::FromBase64String($response.audio_base64) | Set-Content -Path "mensaje.ogg" -Encoding Byte
+```
+
 ## 🎭 Speakers Disponibles
 
 | Speaker | Género | Idioma | Estilo |
