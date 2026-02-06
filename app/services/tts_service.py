@@ -413,9 +413,18 @@ class TTSService:
         self._models: Dict[str, Any] = {}
         self._voice_clone_prompts: Dict[str, Any] = {}
         
-        # Configuración de device
+        # Configuración de device - optimizaciones para velocidad
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
+        # Usar float16 en lugar de bfloat16 para más velocidad en RTX 3060 (Ampere)
+        self.dtype = torch.float16 if self.device == "cuda" else torch.float32
+        
+        # Optimizaciones de PyTorch
+        if self.device == "cuda":
+            # Habilitar cudnn benchmarking para operaciones más rápidas
+            torch.backends.cudnn.benchmark = True
+            # Permitir operaciones TF32 para más velocidad en Ampere+
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
         
         logger.info(f"TTSService inicializado - Device: {self.device}, Dtype: {self.dtype}")
         logger.info(f"Flash Attention: {self.use_flash_attention}")
@@ -461,13 +470,32 @@ class TTSService:
             logger.info(f"Cargando modelo: {model_id}")
             
             try:
+                # Configuración optimizada para velocidad
+                load_kwargs = {
+                    "cache_dir": str(self.cache_dir),
+                    "device_map": "cuda:0" if self.device == "cuda" else "auto",
+                    "torch_dtype": self.dtype,
+                    "low_cpu_mem_usage": True,
+                }
+                
+                # Solo agregar attn_implementation si es necesario
+                if self.use_flash_attention:
+                    load_kwargs["attn_implementation"] = "flash_attention_2"
+                
                 model = Qwen3TTSModel.from_pretrained(
                     model_id,
-                    cache_dir=str(self.cache_dir),
-                    device_map="auto",
-                    dtype=self.dtype,
-                    attn_implementation="flash_attention_2" if self.use_flash_attention else None,
+                    **load_kwargs
                 )
+                
+                # Compilar modelo para aceleración (PyTorch 2.0+)
+                if hasattr(torch, 'compile') and self.device == "cuda":
+                    try:
+                        logger.info("Compilando modelo para aceleración...")
+                        model = torch.compile(model, mode="reduce-overhead")
+                        logger.info("Modelo compilado exitosamente")
+                    except Exception as compile_err:
+                        logger.warning(f"No se pudo compilar modelo: {compile_err}")
+                
                 self._models[cache_key] = model
                 logger.info(f"Modelo {model_id} cargado exitosamente")
                 
