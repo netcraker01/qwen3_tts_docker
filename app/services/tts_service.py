@@ -747,57 +747,30 @@ class TTSService:
         Returns:
             Audio codificado en base64
         """
-        # Guardar audio original a archivo temporal WAV
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
-            sf.write(tmp_wav.name, audio_result.audio_data, audio_result.sample_rate, format="WAV")
-            tmp_wav_path = tmp_wav.name
+        import tempfile
+        import os
+        
+        # Crear archivo temporal para el resultado
+        with tempfile.NamedTemporaryFile(suffix=f".{output_format}", delete=False) as tmp:
+            tmp_path = tmp.name
         
         try:
-            # Cargar con pydub para conversión
-            audio = AudioSegment.from_wav(tmp_wav_path)
+            # Usar el método save_audio existente que funciona
+            final_path = self.save_audio(audio_result, tmp_path, output_format)
             
-            # Asegurar mono para compatibilidad WhatsApp
-            if audio.channels > 1:
-                audio = audio.set_channels(1)
-            
-            # WhatsApp prefiere 16kHz o 24kHz
-            target_sample_rate = 24000 if audio_result.sample_rate >= 24000 else 16000
-            if audio.frame_rate != target_sample_rate:
-                audio = audio.set_frame_rate(target_sample_rate)
-            
-            # Crear buffer para salida
-            output_buffer = io.BytesIO()
-            
-            if output_format.lower() == "mp3":
-                # MP3 mono, 24kHz, buena calidad para voz
-                audio.export(
-                    output_buffer,
-                    format="mp3",
-                    codec="libmp3lame",
-                    parameters=["-ar", str(target_sample_rate), "-ac", "1", "-b:a", "128k"]
-                )
-            elif output_format.lower() in ["ogg", "opus"]:
-                # OGG con Opus - formato nativo de WhatsApp
-                audio.export(
-                    output_buffer,
-                    format="ogg",
-                    codec="libopus",
-                    parameters=["-ar", str(target_sample_rate), "-ac", "1", "-b:a", "24k"]
-                )
-            else:
-                # WAV - mantener como PCM
-                audio.export(output_buffer, format="wav")
-            
-            output_buffer.seek(0)
+            # Leer el archivo generado
+            with open(final_path, 'rb') as f:
+                audio_bytes = f.read()
             
             # Codificar en base64
-            audio_bytes = output_buffer.getvalue()
             return base64.b64encode(audio_bytes).decode('utf-8')
             
         finally:
-            # Limpiar archivo temporal
-            if os.path.exists(tmp_wav_path):
-                os.remove(tmp_wav_path)
+            # Limpiar archivos temporales
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            if os.path.exists(final_path) and final_path != tmp_path:
+                os.remove(final_path)
     
     def save_audio(
         self,
