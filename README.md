@@ -18,7 +18,7 @@ Servicio Docker de Texto a Voz (TTS) basado en **Qwen3-TTS** con soporte para:
 
 - **Modelo 1.7B**: Alta calidad de síntesis de voz
 - **API REST**: FastAPI con documentación OpenAPI/Swagger automática
-- **Soporte GPU**: Optimizado para CUDA con Flash Attention
+- **Soporte GPU**: Optimizado para CUDA
 - **Multi-idioma**: Español, Inglés, Chino, Japonés, Coreano, Alemán, Francés, Ruso, Portugués, Italiano
 - **Lazy Loading**: Carga modelos bajo demanda para optimizar memoria
 
@@ -27,7 +27,7 @@ Servicio Docker de Texto a Voz (TTS) basado en **Qwen3-TTS** con soporte para:
 - Docker y Docker Compose
 - NVIDIA Docker Runtime (para soporte GPU)
 - GPU con al menos 8GB VRAM (recomendado 12GB)
-- ~10GB espacio en disco para modelos
+- ~15GB espacio en disco para modelos y contenedor
 
 ## 🛠️ Instalación y Uso
 
@@ -87,8 +87,8 @@ ls -R
 ```
 qwen3_tts_docker/
 ├── app/              # Código fuente
-├── models/           # Cache de modelos (se creará automáticamente)
-├── output/           # Archivos generados (se creará automáticamente)
+├── models/           # Cache de modelos (volumen)
+├── output/           # Archivos generados (volumen)
 ├── docker-compose.yml
 ├── Dockerfile
 └── README.md
@@ -96,55 +96,7 @@ qwen3_tts_docker/
 
 ---
 
-### Paso 3: Configurar Variables de Entorno (Opcional)
-
-Crea un archivo `.env` para personalizar la configuración:
-
-```bash
-# Crear archivo .env
-cat > .env << EOF
-# GPU Configuration
-CUDA_VISIBLE_DEVICES=0
-
-# Model Configuration
-DEFAULT_MODEL_SIZE=1.7B
-USE_FLASH_ATTENTION=true
-MODEL_CACHE_DIR=/app/models
-
-# Service Configuration
-LOG_LEVEL=info
-EOF
-```
-
-**Variables disponibles:**
-
-| Variable | Descripción | Valor por defecto |
-|----------|-------------|-------------------|
-| `CUDA_VISIBLE_DEVICES` | ID de la GPU a usar | `0` |
-| `DEFAULT_MODEL_SIZE` | Tamaño del modelo (`1.7B` o `0.6B`) | `1.7B` |
-| `USE_FLASH_ATTENTION` | Activar Flash Attention (más rápido) | `true` |
-| `LOG_LEVEL` | Nivel de logs (`debug`, `info`, `warning`, `error`) | `info` |
-
----
-
-### Paso 4: Construir la Imagen Docker
-
-```bash
-# Construir la imagen (primera vez ~5-10 minutos)
-docker-compose build
-
-# O construir sin caché (si hay problemas)
-docker-compose build --no-cache
-```
-
-**Nota:** La construcción descarga:
-- Imagen base CUDA 12.1 (~2GB)
-- Dependencias Python
-- Flash Attention (compilación desde código fuente)
-
----
-
-### Paso 5: Iniciar el Servicio
+### Paso 3: Iniciar el Servicio
 
 ```bash
 # Iniciar en modo detached (background)
@@ -160,21 +112,21 @@ docker-compose logs -f qwen3-tts
 docker-compose logs --tail=100 qwen3-tts
 ```
 
-**Primera ejecución:** Se descargarán automáticamente los modelos de HuggingFace (~4-6GB). Esto puede tardar 10-30 minutos dependiendo de tu conexión.
+**Primera ejecución:** El servicio intentará descargar los modelos automáticamente. Esto puede tardar varios minutos dependiendo de tu conexión.
 
 ---
 
-### Paso 6: Verificar la Instalación
+### Paso 4: Verificar la Instalación
 
 ```bash
 # Test de health check
-curl http://localhost:8000/api/v1/health
+curl http://localhost:8080/api/v1/health
 
 # Ver información de modelos
-curl http://localhost:8000/api/v1/models
+curl http://localhost:8080/api/v1/models
 
 # Listar speakers disponibles
-curl http://localhost:8000/api/v1/speakers
+curl http://localhost:8080/api/v1/speakers
 ```
 
 **Respuesta esperada del health check:**
@@ -183,18 +135,18 @@ curl http://localhost:8000/api/v1/speakers
   "status": "healthy",
   "models_loaded": [],
   "cuda_available": true,
-  "gpu_count": 1,
+  "default_model_size": "1.7B",
   "gpu_name": "NVIDIA GeForce RTX 3060"
 }
 ```
 
 ---
 
-### Paso 7: Acceder a la Documentación
+### Paso 5: Acceder a la Documentación
 
-- **API Docs (Swagger UI)**: http://localhost:8000/docs
-- **API Docs (ReDoc)**: http://localhost:8000/redoc
-- **Health Check**: http://localhost:8000/api/v1/health
+- **API Docs (Swagger UI)**: http://localhost:8080/docs
+- **API Docs (ReDoc)**: http://localhost:8080/redoc
+- **Health Check**: http://localhost:8080/api/v1/health
 
 ## 📡 Endpoints API
 
@@ -222,21 +174,34 @@ curl http://localhost:8000/api/v1/speakers
 ### Custom Voice
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/tts/custom" \
+curl -X POST "http://localhost:8080/api/v1/tts/custom" \
   -H "Content-Type: application/json" \
   -d '{
-    "text": "¡Hola! Esta es una prueba de síntesis de voz.",
-    "speaker": "Sohee",
-    "language": "Spanish",
-    "instruction": "Feliz y enérgica",
+    "text": "Hello world, this is a test of the Qwen3 TTS service.",
+    "speaker": "Ryan",
+    "language": "English",
+    "instruction": "Clear and professional",
     "output_format": "wav"
   }'
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "audio_base64": "UklGRiT+AQBXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YQD+AQAAAAEAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAA/////wAA/////wAAAAD/////AQABAP///v/+/wAAAQABAAEAAAAAAAAA///+////AAAAAP////8AAAEAA...",
+  "sample_rate": 24000,
+  "duration_seconds": 2.72,
+  "model_used": "1.7B_custom_voice",
+  "processing_time_seconds": 17.69,
+  "error": null
+}
 ```
 
 ### Voice Design
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/tts/design" \
+curl -X POST "http://localhost:8080/api/v1/tts/design" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Bienvenidos a la presentación de hoy.",
@@ -249,7 +214,7 @@ curl -X POST "http://localhost:8000/api/v1/tts/design" \
 ### Voice Clone (URL)
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/tts/clone/url" \
+curl -X POST "http://localhost:8080/api/v1/tts/clone/url" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Esta es mi voz clonada hablando.",
@@ -262,7 +227,7 @@ curl -X POST "http://localhost:8000/api/v1/tts/clone/url" \
 ### Voice Clone (Upload)
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/tts/clone/upload" \
+curl -X POST "http://localhost:8080/api/v1/tts/clone/upload" \
   -F "text=Esta es mi voz clonada" \
   -F "ref_text=Hola, esta es mi voz" \
   -F "language=Spanish" \
@@ -304,7 +269,7 @@ Variables de entorno en `docker-compose.yml`:
 | Variable | Descripción | Default |
 |----------|-------------|---------|
 | `CUDA_VISIBLE_DEVICES` | GPU a usar | 0 |
-| `MODEL_CACHE_DIR` | Directorio caché de modelos | /app/models |
+| `HF_HOME` | Directorio caché de modelos HuggingFace | /app/models |
 | `DEFAULT_MODEL_SIZE` | Tamaño modelo (1.7B o 0.6B) | 1.7B |
 | `USE_FLASH_ATTENTION` | Usar Flash Attention | true |
 | `LOG_LEVEL` | Nivel de logs | info |
@@ -315,18 +280,26 @@ Variables de entorno en `docker-compose.yml`:
 qwen3-tts-service/
 ├── app/
 │   ├── api/
-│   │   └── routes.py          # Endpoints REST
+│   │   ├── routes.py          # Endpoints REST
+│   │   └── __init__.py
 │   ├── schemas/
-│   │   └── requests.py        # Modelos Pydantic
+│   │   ├── requests.py        # Modelos Pydantic
+│   │   └── __init__.py
 │   ├── services/
-│   │   └── tts_service.py     # Lógica TTS
-│   ├── __init__.py
+│   │   ├── tts_service.py     # Lógica TTS
+│   │   └── __init__.py
+│   ├── dependencies.py        # Inyección de dependencias
 │   └── main.py                # Entry point FastAPI
 ├── models/                    # Caché de modelos (volumen)
 ├── output/                    # Archivos generados (volumen)
 ├── Dockerfile                 # Imagen Docker
 ├── docker-compose.yml         # Orquestación
+├── download_models.py         # Script descarga manual
 ├── requirements.txt           # Dependencias
+├── test_api.py                # Script de pruebas
+├── .dockerignore
+├── .gitignore
+├── LICENSE
 └── README.md                  # Este archivo
 ```
 
@@ -352,10 +325,15 @@ python -m uvicorn app.main:app --reload --port 8000
 
 ```bash
 # Health check
-curl http://localhost:8000/api/v1/health
+curl http://localhost:8080/api/v1/health
 
 # Listar speakers
-curl http://localhost:8000/api/v1/speakers
+curl http://localhost:8080/api/v1/speakers
+
+# Generar audio
+curl -X POST "http://localhost:8080/api/v1/tts/custom" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello world","speaker":"Ryan","language":"English"}'
 ```
 
 ## 🛑 Detener y Actualizar el Servicio
@@ -413,14 +391,20 @@ sudo systemctl restart docker
 ### Error: `RuntimeError: CUDA out of memory`
 **Solución:** La GPU no tiene suficiente VRAM.
 ```bash
-# Opción 1: Usar modelo más pequeño
+# Usar modelo más pequeño
 echo "DEFAULT_MODEL_SIZE=0.6B" >> .env
 docker-compose restart
+```
 
-# Opción 2: Limitar longitud de audio
-# Editar docker-compose.yml y añadir:
-# environment:
-#   - MAX_AUDIO_LENGTH_SECONDS=30
+### Error: `No se pudo cargar el modelo` o descarga atascada
+**Solución:** Descargar modelos manualmente.
+```bash
+# Ejecutar script de descarga manual dentro del contenedor
+docker-compose exec qwen3-tts python3.10 /app/download_models.py
+
+# O copiar el script y ejecutar
+docker cp download_models.py qwen3-tts:/tmp/
+docker-compose exec qwen3-tts python3.10 /tmp/download_models.py
 ```
 
 ### Error: `Connection refused` al llamar a la API
@@ -432,26 +416,15 @@ docker-compose ps
 # Ver logs
 docker-compose logs qwen3-tts
 
-# Esperar a que descargue modelos (primera vez)
+# Esperar a que esté listo
 docker-compose logs -f qwen3-tts | grep "Application startup complete"
 ```
 
-### Error: `ModuleNotFoundError: No module named 'qwen_tts'`
-**Solución:** Reconstruir la imagen.
+### Error: `Disk quota exceeded` durante build
+**Solución:** Limpiar espacio de Docker.
 ```bash
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
-```
-
-### Modelos descargan muy lento
-**Solución:** Configurar mirror de HuggingFace (China).
-```bash
-# Crear .env con mirror
-cat >> .env << EOF
-HF_ENDPOINT=https://hf-mirror.com
-EOF
-docker-compose restart
+docker system prune -af
+docker volume prune -f
 ```
 
 ---
@@ -473,19 +446,15 @@ ls -lah output/
 
 # Copiar archivo desde contenedor
 docker cp qwen3-tts:/app/output/audio.wav ./audio.wav
-
-# Escuchar audio generado (Linux con paplay)
-paplay output/audio.wav
 ```
 
 ---
 
 ## 🔒 Seguridad
 
-- El servicio expone el puerto 8000 solo en localhost por defecto
+- El servicio expone el puerto 8080 en localhost por defecto
 - Para acceso remoto, usar reverse proxy (nginx) con HTTPS
-- No expongas el puerto 8000 directamente a internet sin autenticación
-- Los archivos de audio en `output/` son accesibles por cualquiera con acceso al contenedor
+- No expongas el puerto 8080 directamente a internet sin autenticación
 
 ---
 
