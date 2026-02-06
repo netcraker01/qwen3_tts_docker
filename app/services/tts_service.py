@@ -712,6 +712,7 @@ class TTSService:
     ) -> AudioResult:
         """
         Genera voz clonada subiendo directamente un archivo de audio.
+        Soporta formatos: WAV, MP3, OGG, OPUS.
         
         Args:
             text: Texto a convertir
@@ -723,21 +724,46 @@ class TTSService:
         Returns:
             AudioResult con el audio generado
         """
-        # Guardar archivo temporal
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(ref_audio_file)
-            tmp_path = tmp.name
+        import subprocess
+        
+        # Guardar archivo temporal con extensión genérica
+        with tempfile.NamedTemporaryFile(suffix=".audio", delete=False) as tmp_input:
+            tmp_input.write(ref_audio_file)
+            input_path = tmp_input.name
+        
+        # Crear archivo de salida WAV
+        wav_path = input_path + ".wav"
         
         try:
-            # Crear prompt y generar
-            prompt_id = self.create_voice_clone_prompt(tmp_path, ref_text, model_size)
+            # Convertir a WAV usando ffmpeg (soporta cualquier formato de entrada)
+            logger.info(f"Convirtiendo archivo de audio a WAV...")
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", input_path,  # Input (cualquier formato)
+                "-ar", "24000",    # Sample rate 24kHz
+                "-ac", "1",        # Mono
+                "-c:a", "pcm_s16le",  # PCM 16-bit little endian
+                wav_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"ffmpeg conversion error: {result.stderr}")
+                raise RuntimeError(f"No se pudo convertir el audio a WAV: {result.stderr[:200]}")
+            
+            logger.info(f"Audio convertido exitosamente a WAV: {wav_path}")
+            
+            # Crear prompt y generar usando el WAV convertido
+            prompt_id = self.create_voice_clone_prompt(wav_path, ref_text, model_size)
             result = self.generate_voice_clone(text, prompt_id, language, model_size)
             return result
             
         finally:
-            # Limpiar archivo temporal
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+            # Limpiar archivos temporales
+            for path in [input_path, wav_path]:
+                if os.path.exists(path):
+                    os.remove(path)
     
     # ============================================================
     # UTILIDADES
