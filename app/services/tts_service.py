@@ -421,13 +421,14 @@ class TTSService:
         logger.info(f"Flash Attention: {self.use_flash_attention}")
         logger.info(f"Cache dir: {self.cache_dir}")
     
-    def _get_model(self, model_type: str, model_size: Optional[str] = None) -> Any:
+    def _get_model(self, model_type: str, model_size: Optional[str] = None, force_reload: bool = False) -> Any:
         """
         Obtiene un modelo, cargándolo si es necesario (lazy loading).
         
         Args:
             model_type: Tipo de modelo ('custom_voice', 'voice_design', 'voice_clone')
-            model_size: Tamaño del modelo ('1.7B' o '0.6B')
+            model_size: Tamaño del modelo a usar ('1.7B' o '0.6B')
+            force_reload: Si es True, limpia memoria antes de cargar
         
         Returns:
             Modelo Qwen3TTS cargado
@@ -437,6 +438,23 @@ class TTSService:
         
         size = model_size or self.default_model_size
         cache_key = f"{size}_{model_type}"
+        
+        # Si se fuerza recarga, limpiar memoria primero
+        if force_reload and torch.cuda.is_available():
+            logger.info("Limpiando memoria CUDA antes de cargar modelo...")
+            # Liberar modelos no usados
+            models_to_keep = [k for k in self._models.keys() if k != cache_key]
+            for k in list(self._models.keys()):
+                if k not in models_to_keep:
+                    logger.info(f"Liberando modelo: {k}")
+                    del self._models[k]
+            
+            # Forzar garbage collection y limpiar caché CUDA
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            logger.info(f"Memoria CUDA liberada: {torch.cuda.memory_allocated() / 1e9:.2f} GB usado")
         
         if cache_key not in self._models:
             model_id = self.MODELS[size][model_type]
@@ -601,7 +619,8 @@ class TTSService:
         Returns:
             ID del prompt creado (para reuso)
         """
-        model = self._get_model("voice_clone", model_size)
+        # Usar force_reload=True para liberar memoria antes de cargar modelo de clone
+        model = self._get_model("voice_clone", model_size, force_reload=True)
         
         prompt_id = f"{hash(ref_audio_path)}_{hash(ref_text)}"
         
@@ -648,7 +667,8 @@ class TTSService:
         Returns:
             AudioResult con el audio generado
         """
-        model = self._get_model("voice_clone", model_size)
+        # Usar force_reload=True para liberar memoria si es necesario
+        model = self._get_model("voice_clone", model_size, force_reload=True)
         
         if voice_clone_prompt_id not in self._voice_clone_prompts:
             raise ValueError(f"Voice clone prompt no encontrado: {voice_clone_prompt_id}")

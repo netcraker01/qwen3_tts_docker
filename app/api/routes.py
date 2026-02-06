@@ -187,19 +187,17 @@ async def clone_voice_from_url(request: VoiceCloneRequest):
         start_time = time.time()
         tts_service = get_tts_service()
         
-        # Crear prompt de clonación (usar modelo 0.6B para evitar OOM)
+        # Crear prompt de clonación (con liberación de memoria)
         prompt_id = tts_service.create_voice_clone_prompt(
             ref_audio_path=request.ref_audio_url,
-            ref_text=request.ref_text,
-            model_size="0.6B"
+            ref_text=request.ref_text
         )
         
         # Generar audio clonado
         audio_result = tts_service.generate_voice_clone(
             text=request.text,
             voice_clone_prompt_id=prompt_id,
-            language=request.language,
-            model_size="0.6B"
+            language=request.language
         )
         
         # Convertir a base64
@@ -265,13 +263,12 @@ async def clone_voice_from_upload(
         if len(audio_content) > 10 * 1024 * 1024:  # 10MB max
             raise HTTPException(status_code=400, detail="Archivo demasiado grande (max 10MB)")
         
-        # Generar audio clonado (usar modelo 0.6B para evitar OOM)
+        # Generar audio clonado (con liberación automática de memoria)
         audio_result = tts_service.generate_voice_clone_from_file(
             text=text,
             ref_audio_file=audio_content,
             ref_text=ref_text,
-            language=language,
-            model_size="0.6B"
+            language=language
         )
         
         # Convertir a base64
