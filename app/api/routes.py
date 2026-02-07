@@ -667,8 +667,16 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         start_time = time.time()
         tts_service = get_tts_service()
         
+        logger.info(f"=== INICIO generate_from_cloned_voice ===")
+        logger.info(f"Voice ID: {request.voice_id}")
+        logger.info(f"Model size: {request.model_size}")
+        logger.info(f"Language: {request.language}")
+        logger.info(f"Text length: {len(request.text)}")
+        
         # Obtener la voz y su prompt
         voice = voice_manager.get_voice(request.voice_id)
+        logger.info(f"Voice encontrada: {voice is not None}")
+        
         if not voice:
             raise HTTPException(
                 status_code=404, 
@@ -677,6 +685,9 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
             )
         
         prompt_data = voice_manager.get_prompt(request.voice_id)
+        logger.info(f"Prompt data encontrado: {prompt_data is not None}")
+        logger.info(f"Tipo de prompt_data: {type(prompt_data)}")
+        
         if not prompt_data:
             raise HTTPException(
                 status_code=500,
@@ -685,32 +696,42 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         
         # Usar el idioma de la voz si no se especificó otro
         language = request.language or voice.language
+        logger.info(f"Language final: {language}")
         
         # Determinar tamaño del modelo
         model_size = request.model_size or "1.7B"
-        
-        logger.info(f"Generando con voz clonada {request.voice_id}, modelo: {model_size}")
+        logger.info(f"Model size final: {model_size}")
         
         # LIMPIEZA AGRESIVA antes de empezar
+        logger.info("Iniciando limpieza de memoria...")
         tts_service._immediate_cleanup()
+        logger.info("Limpieza completada")
         
         # Crear un prompt_id temporal para reusar el prompt existente
         temp_prompt_id = f"temp_{request.voice_id}_{int(time.time())}"
+        logger.info(f"Temp prompt ID: {temp_prompt_id}")
+        
         tts_service._voice_clone_prompts[temp_prompt_id] = prompt_data
+        logger.info(f"Prompt guardado en servicio. Total prompts: {len(tts_service._voice_clone_prompts)}")
         
         try:
             # Usar el método del servicio que ya maneja limpieza automática
+            logger.info("Llamando a generate_voice_clone...")
             audio_result = tts_service.generate_voice_clone(
                 text=request.text,
                 voice_clone_prompt_id=temp_prompt_id,
                 language=language,
                 model_size=model_size
             )
+            logger.info(f"Audio generado exitosamente: {audio_result.duration_seconds}s")
             
             # Convertir a base64
+            logger.info("Convirtiendo a base64...")
             audio_base64 = tts_service.audio_to_base64(audio_result, request.output_format)
+            logger.info("Conversión completada")
             
             processing_time = time.time() - start_time
+            logger.info(f"=== FIN generate_from_cloned_voice - ÉXITO ===")
             
             return TTSResponse(
                 success=True,
@@ -723,13 +744,16 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
             
         finally:
             # Limpiar prompt temporal
+            logger.info("Limpiando prompt temporal...")
             if temp_prompt_id in tts_service._voice_clone_prompts:
                 del tts_service._voice_clone_prompts[temp_prompt_id]
+                logger.info("Prompt temporal eliminado")
         
     except HTTPException:
+        logger.error("HTTPException capturada")
         raise
     except Exception as e:
-        logger.error(f"Error generando desde voz clonada: {e}")
+        logger.error(f"=== ERROR en generate_from_cloned_voice: {e} ===")
         import traceback
         logger.error(traceback.format_exc())
         return TTSResponse(
