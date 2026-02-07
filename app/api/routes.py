@@ -876,3 +876,52 @@ async def get_cloned_voices_stats():
     """
     stats = voice_manager.get_voice_stats()
     return stats
+
+
+@router.post(
+    "/admin/cleanup",
+    response_model=dict,
+    summary="Forzar limpieza de memoria GPU",
+    description="""
+    Fuerza la liberación inmediata de toda la memoria GPU.
+    Útil cuando la memoria está llena y se necesita liberar manualmente.
+    """,
+    tags=["Admin"]
+)
+async def force_memory_cleanup():
+    """
+    Fuerza la limpieza de memoria GPU.
+    """
+    try:
+        tts_service = get_tts_service()
+        
+        logger.info("🧹 FORZANDO LIMPIEZA DE MEMORIA GPU...")
+        
+        # Limpieza agresiva
+        tts_service._immediate_cleanup()
+        
+        import torch
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated() / 1e9
+            reserved = torch.cuda.memory_reserved() / 1e9
+            
+            return {
+                "success": True,
+                "message": "Memoria GPU liberada",
+                "allocated_gb": round(allocated, 2),
+                "reserved_gb": round(reserved, 2),
+                "loaded_models": tts_service.get_loaded_models()
+            }
+        else:
+            return {
+                "success": True,
+                "message": "No hay GPU disponible",
+                "loaded_models": tts_service.get_loaded_models()
+            }
+            
+    except Exception as e:
+        logger.error(f"Error en limpieza forzada: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
