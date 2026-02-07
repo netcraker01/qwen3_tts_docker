@@ -764,6 +764,76 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         )
 
 
+@router.post(
+    "/tts/cloned-voice/regenerate-prompt/{voice_id}",
+    response_model=dict,
+    summary="Regenerar prompt de voz clonada",
+    description="""
+    Regenera el prompt de una voz clonada si se perdió después de reinicio del servidor.
+    Requiere que la voz tenga el audio de referencia disponible.
+    """,
+    tags=["Cloned Voices Management"]
+)
+async def regenerate_voice_prompt(voice_id: str):
+    """
+    Regenera el prompt de una voz clonada.
+    """
+    try:
+        tts_service = get_tts_service()
+        
+        # Obtener la voz
+        voice = voice_manager.get_voice(voice_id)
+        if not voice:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Voz clonada no encontrada: {voice_id}"
+            )
+        
+        logger.info(f"Regenerando prompt para voz: {voice_id}")
+        logger.info(f"Ref audio path: {voice.ref_audio_path}")
+        
+        # Limpiar memoria antes de regenerar
+        tts_service._immediate_cleanup()
+        
+        # Crear el prompt nuevamente
+        prompt_id = tts_service.create_voice_clone_prompt(
+            ref_audio_path=voice.ref_audio_path,
+            ref_text=voice.ref_text
+        )
+        
+        # Obtener el prompt generado
+        prompt_data = tts_service._voice_clone_prompts.get(prompt_id)
+        
+        if not prompt_data:
+            raise HTTPException(
+                status_code=500,
+                detail="No se pudo regenerar el prompt de la voz"
+            )
+        
+        # Guardar el prompt en el VoiceManager
+        success = voice_manager.set_prompt(voice_id, prompt_data)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Prompt regenerado exitosamente para '{voice.name}'",
+                "voice_id": voice_id
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="No se pudo guardar el prompt regenerado"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error regenerando prompt: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get(
     "/cloned-voices/stats",
     response_model=dict,
