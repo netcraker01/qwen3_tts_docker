@@ -726,6 +726,10 @@ class TTSService:
         Returns:
             ID del prompt creado (para reuso)
         """
+        # LIMPIEZA AGRESIVA antes de crear prompt
+        logger.info("Limpieza previa para create_voice_clone_prompt...")
+        self._immediate_cleanup()
+        
         # Usar force_reload=True para liberar memoria antes de cargar modelo de clone
         model = self._get_model("voice_clone", model_size, force_reload=True)
         
@@ -741,16 +745,22 @@ class TTSService:
                 else:
                     audio_path = ref_audio_path
                 
-                prompt = model.create_voice_clone_prompt(
-                    ref_audio=audio_path,
-                    ref_text=ref_text
-                )
+                with torch.no_grad():
+                    prompt = model.create_voice_clone_prompt(
+                        ref_audio=audio_path,
+                        ref_text=ref_text
+                    )
                 
                 self._voice_clone_prompts[prompt_id] = prompt
                 logger.info(f"Voice clone prompt creado: {prompt_id}")
                 
+                # LIMPIAR MEMORIA INMEDIATAMENTE DESPUÉS de crear el prompt
+                self._immediate_cleanup()
+                
             except Exception as e:
                 logger.error(f"Error creando voice clone prompt: {e}")
+                # También limpiar en caso de error
+                self._immediate_cleanup()
                 raise
         
         return prompt_id
@@ -887,14 +897,32 @@ class TTSService:
             
             # Crear prompt y generar usando el WAV convertido
             prompt_id = self.create_voice_clone_prompt(wav_path, ref_text, size)
+            
+            # LIMPIEZA EXTRA entre crear prompt y generar
+            logger.info("Limpieza entre prompt y generación...")
+            self._immediate_cleanup()
+            
             result = self.generate_voice_clone(text, prompt_id, language, size)
+            
+            # LIMPIEZA FINAL después de todo el proceso de voice clone
+            logger.info("Limpieza final post-voice-clone...")
+            self._immediate_cleanup()
+            
             return result
             
+        except Exception as e:
+            # Asegurar limpieza en caso de error
+            logger.error(f"Error en voice clone from file: {e}")
+            self._immediate_cleanup()
+            raise
         finally:
             # Limpiar archivos temporales
             for path in [input_path, wav_path]:
                 if os.path.exists(path):
-                    os.remove(path)
+                    try:
+                        os.remove(path)
+                    except:
+                        pass
     
     # ============================================================
     # UTILIDADES
