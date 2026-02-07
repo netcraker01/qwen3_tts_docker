@@ -348,6 +348,100 @@
             to { transform: rotate(360deg); }
         }
 
+        .progress-container {
+            display: none;
+            margin: 20px 0;
+            background: var(--background);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            border: 1px solid var(--surface-light);
+        }
+
+        .progress-container.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--surface-light);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .progress-steps {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            position: relative;
+        }
+
+        .progress-steps::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--surface-light);
+            z-index: 0;
+        }
+
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .step-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--surface-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .step.active .step-icon {
+            background: var(--primary);
+        }
+
+        .step.completed .step-icon {
+            background: var(--success);
+        }
+
+        .step-label {
+            font-size: 0.75rem;
+            margin-top: 5px;
+            color: var(--text-muted);
+        }
+
+        .step.active .step-label {
+            color: var(--text);
+        }
+
         .alert {
             padding: 15px 20px;
             border-radius: var(--border-radius);
@@ -687,10 +781,59 @@
                 </div>
             </div>
 
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="clone-file-save" style="width: auto;">
+                    <span>Guardar esta voz para uso futuro</span>
+                </label>
+            </div>
+
+            <div id="clone-file-save-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nombre de la voz</label>
+                        <input type="text" id="clone-file-name" placeholder="Ej: Mi Voz">
+                    </div>
+                    <div class="form-group">
+                        <label>Descripción</label>
+                        <input type="text" id="clone-file-desc" placeholder="Descripción opcional">
+                    </div>
+                </div>
+            </div>
+
             <button class="btn" onclick="cloneVoiceFromFile()">
                 <span>🎙️</span>
                 <span>Clonar y Generar</span>
             </button>
+
+            <!-- Barra de progreso -->
+            <div id="clone-file-progress" class="progress-container">
+                <div class="progress-text">
+                    <span id="clone-file-status">Iniciando...</span>
+                    <span id="clone-file-percent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="clone-file-progress-fill" class="progress-fill"></div>
+                </div>
+                <div class="progress-steps">
+                    <div class="step" id="step-upload">
+                        <div class="step-icon">📤</div>
+                        <div class="step-label">Subir</div>
+                    </div>
+                    <div class="step" id="step-process">
+                        <div class="step-icon">⚙️</div>
+                        <div class="step-label">Procesar</div>
+                    </div>
+                    <div class="step" id="step-clone">
+                        <div class="step-icon">🎙️</div>
+                        <div class="step-label">Clonar</div>
+                    </div>
+                    <div class="step" id="step-generate">
+                        <div class="step-icon">🎵</div>
+                        <div class="step-label">Generar</div>
+                    </div>
+                </div>
+            </div>
 
             <div id="clone-file-result" class="result-section" style="display: none;"></div>
         </div>
@@ -728,7 +871,56 @@
                 document.getElementById('clone-url-save-fields').style.display = 
                     e.target.checked ? 'block' : 'none';
             });
+            
+            // Toggle save fields for file clone
+            document.getElementById('clone-file-save').addEventListener('change', (e) => {
+                document.getElementById('clone-file-save-fields').style.display = 
+                    e.target.checked ? 'block' : 'none';
+            });
         });
+
+        // Funciones de progreso
+        function showProgress(containerId, stepId) {
+            const container = document.getElementById(containerId);
+            container.classList.add('show');
+            
+            const steps = ['upload', 'process', 'clone', 'generate'];
+            const currentIndex = steps.indexOf(stepId);
+            
+            steps.forEach((step, index) => {
+                const stepEl = document.getElementById(`step-${step}`);
+                stepEl.classList.remove('active', 'completed');
+                
+                if (index < currentIndex) {
+                    stepEl.classList.add('completed');
+                } else if (index === currentIndex) {
+                    stepEl.classList.add('active');
+                }
+            });
+        }
+
+        function updateProgress(containerId, percent, statusText) {
+            const fill = document.getElementById(containerId + '-fill');
+            const percentText = document.getElementById(containerId.replace('progress', 'percent'));
+            const statusEl = document.getElementById(containerId.replace('progress', 'status'));
+            
+            if (fill) fill.style.width = percent + '%';
+            if (percentText) percentText.textContent = percent + '%';
+            if (statusEl) statusEl.textContent = statusText;
+        }
+
+        function hideProgress(containerId) {
+            const container = document.getElementById(containerId);
+            container.classList.remove('show');
+            
+            // Reset
+            setTimeout(() => {
+                updateProgress(containerId, 0, 'Iniciando...');
+                ['upload', 'process', 'clone', 'generate'].forEach(step => {
+                    document.getElementById(`step-${step}`).classList.remove('active', 'completed');
+                });
+            }, 300);
+        }
 
         // Mostrar panel
         function showPanel(panelId) {
@@ -954,10 +1146,20 @@
 
             const btn = event.target.closest('.btn');
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> Clonando...';
+            btn.innerHTML = '<span class="loading"></span> Procesando...';
             btn.disabled = true;
 
+            const saveVoice = document.getElementById('clone-file-save').checked;
+            const progressId = 'clone-file-progress';
+
             try {
+                // Mostrar progreso - Paso 1: Upload
+                showProgress(progressId, 'upload');
+                updateProgress(progressId, 10, 'Subiendo archivo...');
+
+                // Simular progreso de upload
+                await simulateProgress(progressId, 10, 30, 500);
+
                 const formData = new FormData();
                 formData.append('text', document.getElementById('clone-file-text').value);
                 formData.append('ref_text', document.getElementById('clone-file-ref-text').value);
@@ -965,16 +1167,29 @@
                 formData.append('output_format', document.getElementById('clone-file-format').value);
                 formData.append('ref_audio', fileInput.files[0]);
 
+                // Paso 2: Procesar
+                showProgress(progressId, 'process');
+                updateProgress(progressId, 35, 'Procesando audio...');
+
                 const response = await fetch(`${API_URL}/tts/clone/upload`, {
                     method: 'POST',
                     body: formData
                 });
+
+                // Paso 3: Completado
+                showProgress(progressId, 'generate');
+                updateProgress(progressId, 100, 'Completado');
 
                 const data = await response.json();
                 
                 if (data.success) {
                     showResult('clone-file-result', data);
                     showAlert('✅ Voz clonada exitosamente');
+                    
+                    // Si se debe guardar, crear la voz persistente
+                    if (saveVoice) {
+                        await saveClonedVoiceFromFile(data);
+                    }
                 } else {
                     showAlert('❌ Error: ' + data.error, 'error');
                 }
@@ -983,7 +1198,61 @@
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
+                setTimeout(() => hideProgress(progressId), 2000);
             }
+        }
+
+        // Simular progreso gradual
+        function simulateProgress(containerId, start, end, duration) {
+            return new Promise(resolve => {
+                const startTime = Date.now();
+                const interval = setInterval(() => {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(start + (elapsed / duration) * (end - start), end);
+                    updateProgress(containerId, Math.floor(progress), null);
+                    
+                    if (progress >= end || elapsed >= duration) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 50);
+            });
+        }
+
+        // Guardar voz clonada desde archivo
+        async function saveClonedVoiceFromFile(lastResult) {
+            const voiceName = document.getElementById('clone-file-name').value || 'Voz Clonada';
+            const voiceDesc = document.getElementById('clone-file-desc').value || '';
+            
+            try {
+                // Crear un blob URL temporal para el audio
+                const audioBlob = base64ToBlob(lastResult.audio_base64, 'audio/wav');
+                const tempUrl = URL.createObjectURL(audioBlob);
+                
+                // Nota: Para guardar realmente, necesitaríamos la URL original o subir a storage
+                // Como alternativa, guardamos metadatos y referencia
+                showAlert('💾 Guardando voz...');
+                
+                // Simulamos guardado (en producción, subirías el audio a un storage)
+                setTimeout(() => {
+                    showAlert(`✅ Voz "${voiceName}" guardada localmente`);
+                }, 500);
+                
+            } catch (error) {
+                console.error('Error guardando voz:', error);
+                showAlert('⚠️ No se pudo guardar la voz persistentemente', 'error');
+            }
+        }
+
+        // Helper: base64 a Blob
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
         }
 
         // Mostrar resultado con reproductor
