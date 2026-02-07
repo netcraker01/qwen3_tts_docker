@@ -65,11 +65,16 @@ class VoiceManager:
                 with open(self.voices_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     for voice_data in data.get("voices", []):
+                        # Asegurar que prompt_data existe (aunque sea None)
+                        if "prompt_data" not in voice_data:
+                            voice_data["prompt_data"] = None
                         voice = ClonedVoice(**voice_data)
                         self.voices[voice.id] = voice
-                logger.info(f"Cargadas {len(self.voices)} voces clonadas")
+                logger.info(f"Cargadas {len(self.voices)} voces clonadas desde {self.voices_file}")
             except Exception as e:
                 logger.error(f"Error cargando voces: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
                 self.voices = {}
     
     def _save_voices(self):
