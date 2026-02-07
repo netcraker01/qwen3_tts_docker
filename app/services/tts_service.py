@@ -460,29 +460,33 @@ class TTSService:
         size = model_size or self.default_model_size
         cache_key = f"{size}_{model_type}"
         
-        # Si se fuerza recarga, limpiar memoria primero
-        if force_reload and torch.cuda.is_available():
+        # Siempre limpiar memoria antes de cargar un modelo para evitar OOM
+        if torch.cuda.is_available():
             logger.info("Limpiando memoria CUDA antes de cargar modelo...")
-            # Liberar modelos no usados
-            models_to_keep = [k for k in self._models.keys() if k != cache_key]
-            for k in list(self._models.keys()):
-                if k not in models_to_keep:
-                    logger.info(f"Liberando modelo: {k}")
-                    del self._models[k]
+            
+            # Liberar TODOS los modelos anteriores para evitar acumulación de memoria
+            if self._models:
+                logger.info(f"Liberando {len(self._models)} modelos previos de memoria...")
+                self._models.clear()
             
             # Forzar garbage collection y limpiar caché CUDA
             import gc
             gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
-            logger.info(f"Memoria CUDA liberada: {torch.cuda.memory_allocated() / 1e9:.2f} GB usado")
+            
+            # Esperar un momento para que la memoria se libere completamente
+            import time
+            time.sleep(0.5)
+            
+            logger.info(f"Memoria CUDA después de limpieza: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
         
         if cache_key not in self._models:
             model_id = self.MODELS[size][model_type]
             logger.info(f"Cargando modelo: {model_id}")
             
             try:
-                # Configuración optimizada para velocidad
+                # Configuración optimizada para estabilidad (no velocidad)
                 load_kwargs = {
                     "cache_dir": str(self.cache_dir),
                     "device_map": "cuda:0" if self.device == "cuda" else "auto",
@@ -490,29 +494,26 @@ class TTSService:
                     "low_cpu_mem_usage": True,
                 }
                 
-                # Solo agregar attn_implementation si es necesario
-                if self.use_flash_attention:
-                    load_kwargs["attn_implementation"] = "flash_attention_2"
+                # NO usar flash_attention para evitar errores CUDA
+                # NO compilar modelo para evitar inestabilidad
                 
                 model = Qwen3TTSModel.from_pretrained(
                     model_id,
                     **load_kwargs
                 )
                 
-                # Compilar modelo para aceleración (PyTorch 2.0+)
-                if hasattr(torch, 'compile') and self.device == "cuda":
-                    try:
-                        logger.info("Compilando modelo para aceleración...")
-                        model = torch.compile(model, mode="reduce-overhead")
-                        logger.info("Modelo compilado exitosamente")
-                    except Exception as compile_err:
-                        logger.warning(f"No se pudo compilar modelo: {compile_err}")
+                # Poner modelo en modo eval para reducir uso de memoria
+                model.eval()
                 
                 self._models[cache_key] = model
                 logger.info(f"Modelo {model_id} cargado exitosamente")
+                logger.info(f"Memoria CUDA después de carga: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
                 
             except Exception as e:
                 logger.error(f"Error cargando modelo {model_id}: {e}")
+                # Limpiar memoria en caso de error
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 raise RuntimeError(f"No se pudo cargar el modelo {model_id}: {e}")
         
         return self._models[cache_key]
@@ -520,6 +521,27 @@ class TTSService:
     def get_loaded_models(self) -> List[str]:
         """Retorna lista de modelos actualmente cargados."""
         return list(self._models.keys())
+    
+    def _cleanup_memory(self):
+        """Limpia memoria CUDA antes de operaciones pesadas."""
+        if torch.cuda.is_available():
+            logger.info("Limpiando memoria CUDA...")
+            
+            # Liberar todos los modelos
+            if self._models:
+                self._models.clear()
+            
+            # Limpiar caché y forzar sincronización
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            
+            # Pequeña pausa para asegurar liberación
+            import time
+            time.sleep(0.3)
+            
+            logger.info(f"Memoria CUDA limpia: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
     
     def cleanup(self):
         """Libera recursos y modelos cargados."""
@@ -555,18 +577,23 @@ class TTSService:
         Returns:
             AudioResult con el audio generado
         """
+        # Forzar liberación de memoria antes de generar
+        self._cleanup_memory()
+        
         model = self._get_model("custom_voice", model_size)
         
         logger.info(f"Generando Custom Voice - Speaker: {speaker}, Lang: {language}")
         start_time = time.time()
         
         try:
-            wavs, sr = model.generate_custom_voice(
-                text=text,
-                language=language,
-                speaker=speaker,
-                instruct=instruction
-            )
+            # Usar no_grad para reducir uso de memoria
+            with torch.no_grad():
+                wavs, sr = model.generate_custom_voice(
+                    text=text,
+                    language=language,
+                    speaker=speaker,
+                    instruct=instruction
+                )
             
             audio_data = wavs[0]
             duration = len(audio_data) / sr
@@ -608,6 +635,9 @@ class TTSService:
         Returns:
             AudioResult con el audio generado
         """
+        # Forzar liberación de memoria antes de generar
+        self._cleanup_memory()
+        
         model = self._get_model("voice_design", model_size)
         
         logger.info(f"Generando Voice Design - Lang: {language}")
@@ -615,11 +645,12 @@ class TTSService:
         start_time = time.time()
         
         try:
-            wavs, sr = model.generate_voice_design(
-                text=text,
-                language=language,
-                instruct=voice_description
-            )
+            with torch.no_grad():
+                wavs, sr = model.generate_voice_design(
+                    text=text,
+                    language=language,
+                    instruct=voice_description
+                )
             
             audio_data = wavs[0]
             duration = len(audio_data) / sr

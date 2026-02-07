@@ -489,19 +489,39 @@ voice_manager = VoiceManager(storage_dir="/app/data")
     description="""
     Crea una voz clonada y la guarda para uso futuro.
     La voz se almacena en disco y puede reusarse múltiples veces.
+    Acepta URL de audio o data URL base64 (data:audio/wav;base64,...).
     """,
     tags=["Cloned Voices Management"]
 )
 async def create_cloned_voice(request: CreateClonedVoiceRequest):
     """
-    Crea una voz clonada persistente desde URL de audio.
+    Crea una voz clonada persistente desde URL de audio o data URL base64.
     """
     try:
         tts_service = get_tts_service()
         
+        ref_audio_url = request.ref_audio_url
+        
+        # Si es data URL base64, guardar temporalmente
+        if ref_audio_url.startswith("data:audio") and ";base64," in ref_audio_url:
+            logger.info("Detectado data URL base64, procesando...")
+            import base64
+            import tempfile
+            import os
+            
+            # Extraer la parte base64
+            base64_data = ref_audio_url.split(";base64,")[1]
+            audio_bytes = base64.b64decode(base64_data)
+            
+            # Guardar temporalmente
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(audio_bytes)
+                ref_audio_url = tmp.name
+                logger.info(f"Audio base64 guardado temporalmente en: {ref_audio_url}")
+        
         # Crear el prompt de clonación
         prompt_id = tts_service.create_voice_clone_prompt(
-            ref_audio_path=request.ref_audio_url,
+            ref_audio_path=ref_audio_url,
             ref_text=request.ref_text
         )
         
@@ -511,15 +531,23 @@ async def create_cloned_voice(request: CreateClonedVoiceRequest):
         if not prompt_data:
             raise HTTPException(status_code=500, detail="No se pudo crear el prompt de voz")
         
-        # Guardar en el VoiceManager
+        # Guardar en el VoiceManager (usar una URL placeholder ya que el audio ya se procesó)
         voice = voice_manager.create_voice(
             name=request.name,
             description=request.description,
-            ref_audio_path=request.ref_audio_url,
+            ref_audio_path="internal://voice_prompt/" + prompt_id,  # URL interna
             ref_text=request.ref_text,
             language=request.language,
             prompt_data=prompt_data
         )
+        
+        # Limpiar archivo temporal si era data URL
+        if ref_audio_url.startswith("/tmp"):
+            try:
+                os.remove(ref_audio_url)
+                logger.info(f"Archivo temporal eliminado: {ref_audio_url}")
+            except:
+                pass
         
         return {
             "success": True,
@@ -529,6 +557,8 @@ async def create_cloned_voice(request: CreateClonedVoiceRequest):
         
     except Exception as e:
         logger.error(f"Error creando voz clonada: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 
