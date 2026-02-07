@@ -247,6 +247,7 @@ async def clone_voice_from_upload(
     ref_text: str = Form(..., description="Texto del audio de referencia"),
     language: str = Form(default="Spanish", description="Idioma del texto"),
     output_format: str = Form(default="wav", description="Formato de salida"),
+    model_size: str = Form(default="1.7B", description="Tamaño del modelo (0.6B o 1.7B)"),
     ref_audio: UploadFile = File(..., description="Archivo de audio de referencia")
 ):
     """
@@ -256,7 +257,7 @@ async def clone_voice_from_upload(
         start_time = time.time()
         tts_service = get_tts_service()
         
-        logger.info(f"Recibiendo archivo: {ref_audio.filename}, content-type: {ref_audio.content_type}")
+        logger.info(f"Recibiendo archivo: {ref_audio.filename}, content-type: {ref_audio.content_type}, modelo: {model_size}")
         
         # Leer contenido del archivo
         audio_content = await ref_audio.read()
@@ -270,11 +271,13 @@ async def clone_voice_from_upload(
             raise HTTPException(status_code=400, detail="Archivo vacío")
         
         # Generar audio clonado (con liberación automática de memoria)
+        # Usar el modelo seleccionado o el default
         audio_result = tts_service.generate_voice_clone_from_file(
             text=text,
             ref_audio_file=audio_content,
             ref_text=ref_text,
-            language=language
+            language=language,
+            model_size=model_size
         )
         
         # Convertir a base64
@@ -653,8 +656,17 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         # Usar el idioma de la voz si no se especificó otro
         language = request.language or voice.language
         
-        # Cargar modelo voice_clone si es necesario
-        model = tts_service._get_model("voice_clone")
+        # Cargar modelo voice_clone del tamaño especificado
+        model_size = request.model_size or "1.7B"
+        model_key = f"{model_size}_voice_clone"
+        
+        # Cargar el modelo especificado
+        if model_size == "0.6B" and "0.6B" not in tts_service.loaded_models:
+            model = tts_service._load_model("0.6B", "voice_clone")
+        elif model_size == "1.7B":
+            model = tts_service._get_model("voice_clone")
+        else:
+            model = tts_service._get_model("voice_clone")
         
         # Generar audio directamente con el prompt guardado
         wavs, sr = model.generate_voice_clone(

@@ -168,6 +168,11 @@ class VoiceCloneRequest(BaseModel):
         description="Formato de salida del audio",
         example="wav"
     )
+    model_size: str = Field(
+        default="1.7B",
+        description="Tamaño del modelo a usar (0.6B más rápido, 1.7B mejor calidad)",
+        example="1.7B"
+    )
     
     @validator('language')
     def validate_language(cls, v):
@@ -179,6 +184,12 @@ class VoiceCloneRequest(BaseModel):
     def validate_format(cls, v):
         if v not in OUTPUT_FORMATS:
             raise ValueError(f"Formato '{v}' no soportado. Opciones: {OUTPUT_FORMATS}")
+        return v
+    
+    @validator('model_size')
+    def validate_model_size(cls, v):
+        if v not in MODEL_SIZES:
+            raise ValueError(f"Tamaño de modelo '{v}' no válido. Opciones: {MODEL_SIZES}")
         return v
 
 
@@ -311,3 +322,10 @@ class GenerateFromClonedVoiceRequest(BaseModel):
     voice_id: str = Field(..., description="ID de la voz clonada a usar")
     language: Optional[str] = Field(None, description="Idioma (opcional, usa el de la voz por defecto)")
     output_format: str = Field(default="wav", description="Formato de salida")
+    model_size: str = Field(default="1.7B", description="Tamaño del modelo (0.6B o 1.7B)")
+    
+    @validator('model_size')
+    def validate_model_size(cls, v):
+        if v not in MODEL_SIZES:
+            raise ValueError(f"Tamaño de modelo '{v}' no válido. Opciones: {MODEL_SIZES}")
+        return v

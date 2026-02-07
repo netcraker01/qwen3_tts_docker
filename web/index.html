@@ -429,122 +429,6 @@
             </div>
         </div>
 
-        <!-- Panel: Voz Predefinida -->
-        <div id="panel-custom" class="panel active">
-            <h2>🎭 Generar Voz Predefinida</h2>
-            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">
-                Usa personajes preestablecidos como Vivian, Ryan, etc.
-            </p>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Personaje</label>
-                    <select id="custom-speaker">
-                        <option value="Vivian">Vivian (Femenino, Chino)</option>
-                        <option value="Serena">Serena (Femenino, Inglés)</option>
-                        <option value="Uncle_Fu">Uncle Fu (Masculino, Chino)</option>
-                        <option value="Dylan">Dylan (Masculino, Inglés)</option>
-                        <option value="Eric">Eric (Masculino, Profesional)</option>
-                        <option value="Ryan" selected>Ryan (Masculino, Conversacional)</option>
-                        <option value="Aiden">Aiden (Masculino, Versátil)</option>
-                        <option value="Ono_Anna">Ono Anna (Femenino, Japonés)</option>
-                        <option value="Sohee">Sohee (Femenino, Coreano)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Idioma</label>
-                    <select id="custom-language">
-                        <option value="Auto">Auto-detectar</option>
-                        <option value="Spanish" selected>Español</option>
-                        <option value="English">Inglés</option>
-                        <option value="Chinese">Chino</option>
-                        <option value="Japanese">Japonés</option>
-                        <option value="Korean">Coreano</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Texto a convertir</label>
-                <textarea id="custom-text" placeholder="Escribe el texto que quieres convertir a voz...">Hola, esta es una prueba de síntesis de voz.</textarea>
-            </div>
-
-            <div class="form-group">
-                <label>Estilo/Emoción (opcional)</label>
-                <input type="text" id="custom-instruction" placeholder="Ej: Habla con entusiasmo y energía">
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Modelo</label>
-                    <select id="custom-model">
-                        <option value="1.7B" selected>1.7B (Mejor calidad)</option>
-                        <option value="0.6B">0.6B (Más rápido)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Formato</label>
-                    <select id="custom-format">
-                        <option value="wav" selected>WAV</option>
-                        <option value="mp3">MP3</option>
-                        <option value="ogg">OGG</option>
-                    </select>
-                </div>
-            </div>
-
-            <button class="btn" onclick="generateCustomVoice()">
-                <span>🎵</span>
-                <span>Generar Voz</span>
-            </button>
-
-            <div id="custom-result" class="result-section" style="display: none;"></div>
-        </div>
-
-        <!-- Panel: Diseñar Voz -->
-        <div id="panel-design" class="panel">
-            <h2>✨ Diseñar Voz Personalizada</h2>
-            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">
-                Describe la voz deseada en lenguaje natural
-            </p>
-
-            <div class="form-group">
-                <label>Descripción de la voz</label>
-                <textarea id="design-description" placeholder="Ej: gender: Female, pitch: High, speed: Moderate, emotion: Cheerful">gender: Male, pitch: Deep, speed: Slow, emotion: Professional</textarea>
-                <small style="color: var(--text-muted); font-size: 0.75rem;">
-                    gender, pitch, speed, age, emotion, tone
-                </small>
-            </div>
-
-            <div class="form-group">
-                <label>Texto a convertir</label>
-                <textarea id="design-text" placeholder="Escribe el texto...">Bienvenido al sistema de voz.</textarea>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Idioma</label>
-                    <select id="design-language">
-                        <option value="Spanish" selected>Español</option>
-                        <option value="English">Inglés</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Formato</label>
-                    <select id="design-format">
-                        <option value="wav" selected>WAV</option>
-                        <option value="mp3">MP3</option>
-                    </select>
-                </div>
-            </div>
-
-            <button class="btn" onclick="generateVoiceDesign()">
-                <span>✨</span>
-                <span>Diseñar y Generar</span>
-            </button>
-
-            <div id="design-result" class="result-section" style="display: none;"></div>
-        </div>
-
         <!-- Panel: Usar Voz Clonada -->
         <div id="panel-use-cloned" class="panel">
             <h2>🎙️ Usar Voz Clonada</h2>
@@ -566,19 +450,27 @@
 
             <div class="form-row">
                 <div class="form-group">
+                    <label>Modelo</label>
+                    <select id="use-voice-model">
+                        <option value="1.7B" selected>1.7B (Mejor calidad)</option>
+                        <option value="0.6B">0.6B (Más rápido)</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Idioma</label>
                     <select id="use-voice-language">
                         <option value="Spanish" selected>Español</option>
                         <option value="English">Inglés</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Formato</label>
-                    <select id="use-voice-format">
-                        <option value="wav" selected>WAV</option>
-                        <option value="mp3">MP3</option>
-                    </select>
-                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Formato</label>
+                <select id="use-voice-format">
+                    <option value="wav" selected>WAV</option>
+                    <option value="mp3">MP3</option>
+                </select>
             </div>
 
             <button class="btn" onclick="generateFromClonedVoice()" id="btn-use-voice" disabled>
@@ -632,19 +524,27 @@
 
             <div class="form-row">
                 <div class="form-group">
+                    <label>Modelo</label>
+                    <select id="clone-model">
+                        <option value="1.7B" selected>1.7B (Mejor calidad)</option>
+                        <option value="0.6B">0.6B (Más rápido)</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Idioma</label>
                     <select id="clone-language">
                         <option value="Spanish" selected>Español</option>
                         <option value="English">Inglés</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Formato</label>
-                    <select id="clone-format">
-                        <option value="wav" selected>WAV</option>
-                        <option value="mp3">MP3</option>
-                    </select>
-                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Formato</label>
+                <select id="clone-format">
+                    <option value="wav" selected>WAV</option>
+                    <option value="mp3">MP3</option>
+                </select>
             </div>
 
             <button class="btn" onclick="cloneAndSaveVoice()">
@@ -706,6 +606,10 @@
                 </button>
             </div>
         </div>
+
+        <!-- Paneles ocultos para evitar errores -->
+        <div id="panel-custom" style="display:none;"></div>
+        <div id="panel-design" style="display:none;"></div>
     </div>
 
     <script>
@@ -716,7 +620,7 @@
             checkServerStatus();
             setInterval(checkServerStatus, 30000);
             
-            // Cargar voces cuando se abre el panel de usar voz clonada o gestionar
+            // Cargar voces cuando se abre el panel
             document.querySelector('.tab[onclick="showPanel(\'use-cloned\')"]').addEventListener('click', loadVoicesForSelect);
             document.querySelector('.tab[onclick="showPanel(\'manage\')"]').addEventListener('click', loadVoicesForManagement);
         });
@@ -726,7 +630,8 @@
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
             
             event.target.closest('.tab').classList.add('active');
-            document.getElementById('panel-' + panelId).classList.add('active');
+            const panel = document.getElementById('panel-' + panelId);
+            if (panel) panel.classList.add('active');
         }
 
         function showAlert(message, type = 'success') {
@@ -759,78 +664,6 @@
                 }
             } catch (error) {
                 document.getElementById('server-status').textContent = '❌ Sin conexión';
-            }
-        }
-
-        // ==================== GENERAR VOZ PREDEFINIDA ====================
-        async function generateCustomVoice() {
-            const btn = event.target.closest('.btn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span>⏳</span> Generando...';
-            btn.disabled = true;
-
-            try {
-                const response = await fetch(`${API_URL}/tts/custom`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        text: document.getElementById('custom-text').value,
-                        speaker: document.getElementById('custom-speaker').value,
-                        language: document.getElementById('custom-language').value,
-                        instruction: document.getElementById('custom-instruction').value || null,
-                        model_size: document.getElementById('custom-model').value,
-                        output_format: document.getElementById('custom-format').value
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    showResult('custom-result', data);
-                    showAlert('✅ Voz generada exitosamente');
-                } else {
-                    showAlert('❌ Error: ' + data.error, 'error');
-                }
-            } catch (error) {
-                showAlert('❌ Error de conexión', 'error');
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        }
-
-        // ==================== DISEÑAR VOZ ====================
-        async function generateVoiceDesign() {
-            const btn = event.target.closest('.btn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span>⏳</span> Diseñando...';
-            btn.disabled = true;
-
-            try {
-                const response = await fetch(`${API_URL}/tts/design`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        text: document.getElementById('design-text').value,
-                        voice_description: document.getElementById('design-description').value,
-                        language: document.getElementById('design-language').value,
-                        output_format: document.getElementById('design-format').value
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    showResult('design-result', data);
-                    showAlert('✅ Voz diseñada exitosamente');
-                } else {
-                    showAlert('❌ Error: ' + data.error, 'error');
-                }
-            } catch (error) {
-                showAlert('❌ Error de conexión', 'error');
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
             }
         }
 
@@ -885,7 +718,8 @@
                         voice_id: voiceId,
                         text: document.getElementById('use-voice-text').value,
                         language: document.getElementById('use-voice-language').value,
-                        output_format: document.getElementById('use-voice-format').value
+                        output_format: document.getElementById('use-voice-format').value,
+                        model_size: document.getElementById('use-voice-model').value
                     })
                 });
 
@@ -894,7 +728,7 @@
                 if (data.success) {
                     showResult('use-voice-result', data);
                     showAlert('✅ Audio generado exitosamente');
-                    loadVoicesForSelect(); // Actualizar contador de usos
+                    loadVoicesForSelect();
                 } else {
                     showAlert('❌ Error: ' + (data.error || 'No se pudo generar'), 'error');
                 }
@@ -932,14 +766,9 @@
             btn.disabled = true;
 
             const progressDiv = document.getElementById('clone-progress');
-            const progressFill = document.getElementById('clone-progress-fill');
-            const progressText = document.getElementById('clone-percent');
-            const statusText = document.getElementById('clone-status');
-            
             progressDiv.classList.add('show');
             
             try {
-                // Paso 1: Subir y clonar
                 updateProgress(10, 'Subiendo audio...');
                 
                 const formData = new FormData();
@@ -947,6 +776,7 @@
                 formData.append('ref_text', refText);
                 formData.append('language', document.getElementById('clone-language').value);
                 formData.append('output_format', document.getElementById('clone-format').value);
+                formData.append('model_size', document.getElementById('clone-model').value);
                 formData.append('ref_audio', fileInput.files[0]);
 
                 updateProgress(30, 'Clonando voz...');
@@ -964,20 +794,16 @@
 
                 updateProgress(70, 'Guardando voz...');
                 
-                // Paso 2: Guardar la voz persistentemente
-                // Crear URL temporal para el audio
                 const audioBlob = base64ToBlob(cloneData.audio_base64, 'audio/wav');
                 const tempUrl = URL.createObjectURL(audioBlob);
                 
-                // Subir a un servidor temporal o usar data URL
-                // Por ahora, guardamos con referencia al blob
                 const saveResponse = await fetch(`${API_URL}/cloned-voices`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         name: name,
                         description: document.getElementById('clone-description').value || 'Voz clonada desde archivo',
-                        ref_audio_url: tempUrl, // Esto es temporal, idealmente subir a storage
+                        ref_audio_url: tempUrl,
                         ref_text: refText,
                         language: document.getElementById('clone-language').value
                     })
@@ -991,7 +817,6 @@
                     showResult('clone-result', cloneData);
                     showAlert(`✅ Voz "${name}" clonada y guardada exitosamente`);
                     
-                    // Limpiar formulario
                     fileInput.value = '';
                     document.getElementById('clone-file-label').textContent = '📁 Haz clic para seleccionar archivo';
                     document.getElementById('clone-name').value = '';
@@ -999,7 +824,6 @@
                     document.getElementById('clone-ref-text').value = '';
                     document.getElementById('clone-test-text').value = '';
                 } else {
-                    // Mostrar resultado de clonación aunque no se haya guardado
                     showResult('clone-result', cloneData);
                     showAlert('⚠️ Voz clonada pero no se pudo guardar persistentemente', 'warning');
                 }
@@ -1177,7 +1001,6 @@
             resultDiv.style.display = 'block';
         }
 
-        // Cerrar modal al hacer clic fuera
         document.getElementById('edit-modal').addEventListener('click', (e) => {
             if (e.target === e.currentTarget) closeEditModal();
         });
