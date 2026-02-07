@@ -543,6 +543,28 @@ class TTSService:
             
             logger.info(f"Memoria CUDA limpia: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
     
+    def _immediate_cleanup(self):
+        """Limpieza inmediata después de generación para liberar memoria rápido."""
+        if torch.cuda.is_available():
+            logger.info("Limpieza inmediata post-generación...")
+            
+            # Liberar modelos inmediatamente
+            if self._models:
+                self._models.clear()
+            
+            # Forzar garbage collection
+            import gc
+            gc.collect()
+            
+            # Vaciar caché CUDA múltiples veces para asegurar liberación
+            for _ in range(3):
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                import time
+                time.sleep(0.2)
+            
+            logger.info(f"Memoria post-limpieza: {torch.cuda.memory_allocated() / 1e9:.2f} GB libre")
+    
     def cleanup(self):
         """Libera recursos y modelos cargados."""
         logger.info("Limpiando recursos...")
@@ -601,15 +623,22 @@ class TTSService:
             
             logger.info(f"Audio generado: {duration:.2f}s en {processing_time:.2f}s")
             
-            return AudioResult(
+            result = AudioResult(
                 audio_data=audio_data,
                 sample_rate=sr,
                 duration_seconds=duration,
                 model_used=f"{model_size or self.default_model_size}_custom_voice"
             )
             
+            # LIMPIAR MEMORIA INMEDIATAMENTE DESPUÉS de generar
+            self._immediate_cleanup()
+            
+            return result
+            
         except Exception as e:
             logger.error(f"Error en generate_custom_voice: {e}")
+            # También limpiar en caso de error
+            self._immediate_cleanup()
             raise
     
     # ============================================================
@@ -658,15 +687,22 @@ class TTSService:
             
             logger.info(f"Audio generado: {duration:.2f}s en {processing_time:.2f}s")
             
-            return AudioResult(
+            result = AudioResult(
                 audio_data=audio_data,
                 sample_rate=sr,
                 duration_seconds=duration,
                 model_used=f"{model_size or self.default_model_size}_voice_design"
             )
             
+            # LIMPIAR MEMORIA INMEDIATAMENTE DESPUÉS de generar
+            self._immediate_cleanup()
+            
+            return result
+            
         except Exception as e:
             logger.error(f"Error en generate_voice_design: {e}")
+            # También limpiar en caso de error
+            self._immediate_cleanup()
             raise
     
     # ============================================================
@@ -750,11 +786,12 @@ class TTSService:
         start_time = time.time()
         
         try:
-            wavs, sr = model.generate_voice_clone(
-                text=text,
-                language=language,
-                voice_clone_prompt=prompt
-            )
+            with torch.no_grad():
+                wavs, sr = model.generate_voice_clone(
+                    text=text,
+                    language=language,
+                    voice_clone_prompt=prompt
+                )
             
             audio_data = wavs[0]
             duration = len(audio_data) / sr
@@ -762,15 +799,22 @@ class TTSService:
             
             logger.info(f"Audio generado: {duration:.2f}s en {processing_time:.2f}s")
             
-            return AudioResult(
+            result = AudioResult(
                 audio_data=audio_data,
                 sample_rate=sr,
                 duration_seconds=duration,
                 model_used=f"{model_size or self.default_model_size}_voice_clone"
             )
             
+            # LIMPIAR MEMORIA INMEDIATAMENTE DESPUÉS de generar
+            self._immediate_cleanup()
+            
+            return result
+            
         except Exception as e:
             logger.error(f"Error en generate_voice_clone: {e}")
+            # También limpiar en caso de error
+            self._immediate_cleanup()
             raise
     
     def generate_voice_clone_from_file(
