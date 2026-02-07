@@ -178,6 +178,26 @@ class VoiceManager:
         # (los prompts no se pueden serializar, hay que recrearlos)
         return None
     
+    def set_prompt(self, voice_id: str, prompt_data: Any) -> bool:
+        """
+        Establece el prompt para una voz clonada.
+        Útil para restaurar prompts después de reinicio.
+        
+        Args:
+            voice_id: ID de la voz
+            prompt_data: El objeto prompt
+        
+        Returns:
+            True si se guardó, False si la voz no existe
+        """
+        if voice_id not in self.voices:
+            return False
+        
+        self._prompts[voice_id] = prompt_data
+        self.voices[voice_id].prompt_data = prompt_data
+        logger.info(f"Prompt restaurado para voz: {voice_id}")
+        return True
+    
     def list_voices(self) -> List[Dict]:
         """
         Lista todas las voces clonadas.
