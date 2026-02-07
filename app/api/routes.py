@@ -67,7 +67,9 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 async def generate_custom_voice(request: CustomVoiceRequest):
     """
     Genera voz usando un personaje preestablecido.
+    Libera memoria GPU inmediatamente después de la generación.
     """
+    tts_service = None
     try:
         start_time = time.time()
         tts_service = get_tts_service()
@@ -77,7 +79,8 @@ async def generate_custom_voice(request: CustomVoiceRequest):
             text=request.text,
             speaker=request.speaker,
             language=request.language,
-            instruction=request.instruction
+            instruction=request.instruction,
+            model_size=request.model_size if hasattr(request, 'model_size') else None
         )
         
         # Convertir a base64
@@ -102,6 +105,11 @@ async def generate_custom_voice(request: CustomVoiceRequest):
             model_used="custom_voice",
             processing_time_seconds=0
         )
+    finally:
+        # SIEMPRE liberar memoria después de cada solicitud
+        if tts_service:
+            logger.info("Liberando memoria GPU post-solicitud (custom voice)...")
+            tts_service._immediate_cleanup()
 
 
 # ============================================================
@@ -132,7 +140,9 @@ async def generate_custom_voice(request: CustomVoiceRequest):
 async def generate_voice_design(request: VoiceDesignRequest):
     """
     Genera voz mediante descripción de texto.
+    Libera memoria GPU inmediatamente después de la generación.
     """
+    tts_service = None
     try:
         start_time = time.time()
         tts_service = get_tts_service()
@@ -166,6 +176,11 @@ async def generate_voice_design(request: VoiceDesignRequest):
             model_used="voice_design",
             processing_time_seconds=0
         )
+    finally:
+        # SIEMPRE liberar memoria después de cada solicitud
+        if tts_service:
+            logger.info("Liberando memoria GPU post-solicitud (voice design)...")
+            tts_service._immediate_cleanup()
 
 
 # ============================================================
@@ -185,7 +200,9 @@ async def generate_voice_design(request: VoiceDesignRequest):
 async def clone_voice_from_url(request: VoiceCloneRequest):
     """
     Clona voz desde audio de referencia en URL.
+    Libera memoria GPU inmediatamente después de la generación.
     """
+    tts_service = None
     try:
         if not request.ref_audio_url:
             raise HTTPException(status_code=400, detail="Se requiere ref_audio_url")
@@ -228,6 +245,11 @@ async def clone_voice_from_url(request: VoiceCloneRequest):
             model_used="voice_clone",
             processing_time_seconds=0
         )
+    finally:
+        # SIEMPRE liberar memoria después de cada solicitud
+        if tts_service:
+            logger.info("Liberando memoria GPU post-solicitud (voice clone URL)...")
+            tts_service._immediate_cleanup()
 
 
 @router.post(
@@ -252,7 +274,9 @@ async def clone_voice_from_upload(
 ):
     """
     Clona voz desde archivo de audio subido.
+    Libera memoria GPU inmediatamente después de la generación.
     """
+    tts_service = None
     try:
         start_time = time.time()
         tts_service = get_tts_service()
@@ -306,6 +330,11 @@ async def clone_voice_from_upload(
             model_used="voice_clone",
             processing_time_seconds=0
         )
+    finally:
+        # SIEMPRE liberar memoria después de cada solicitud
+        if tts_service:
+            logger.info("Liberando memoria GPU post-solicitud (voice clone upload)...")
+            tts_service._immediate_cleanup()
 
 
 # ============================================================
