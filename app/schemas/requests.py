@@ -318,11 +318,21 @@ class ClonedVoiceListResponse(BaseModel):
 
 class GenerateFromClonedVoiceRequest(BaseModel):
     """Request para generar audio usando una voz clonada guardada."""
+    model_config = {
+        "protected_namespaces": (),
+    }
+    
     text: str = Field(..., min_length=1, description="Texto a convertir")
     voice_id: str = Field(..., description="ID de la voz clonada a usar")
     language: Optional[str] = Field(None, description="Idioma (opcional, usa el de la voz por defecto)")
     output_format: str = Field(default="wav", description="Formato de salida")
     model_size: str = Field(default="1.7B", description="Tamaño del modelo (0.6B o 1.7B)")
+    
+    @validator('output_format')
+    def validate_format(cls, v):
+        if v not in OUTPUT_FORMATS:
+            raise ValueError(f"Formato '{v}' no soportado. Opciones: {OUTPUT_FORMATS}")
+        return v
     
     @validator('model_size')
     def validate_model_size(cls, v):
