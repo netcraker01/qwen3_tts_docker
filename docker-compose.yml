@@ -37,20 +37,19 @@ services:
     networks:
       - tts-network
 
-  # Optional: Add a simple web UI for testing
+  # Web UI Interface
   tts-webui:
     image: nginx:alpine
     container_name: qwen3-tts-webui
     ports:
-      - "8080:80"
+      - "8081:80"
     volumes:
-      - ./webui:/usr/share/nginx/html:ro
+      - ./web:/usr/share/nginx/html:ro
     depends_on:
       - qwen3-tts
     networks:
       - tts-network
-    profiles:
-      - with-ui
+    restart: unless-stopped
 
 networks:
   tts-network:

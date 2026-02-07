@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen3-TTS Web Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --background: #0f172a;
+            --surface: #1e293b;
+            --surface-light: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --border-radius: 12px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--background);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 0;
+            border-bottom: 1px solid var(--surface-light);
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            background: var(--surface);
+            padding: 12px 20px;
+            border-radius: var(--border-radius);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .status-item .indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .tab {
+            background: var(--surface);
+            border: 2px solid transparent;
+            padding: 15px 25px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tab:hover {
+            background: var(--surface-light);
+            transform: translateY(-2px);
+        }
+
+        .tab.active {
+            border-color: var(--primary);
+            background: linear-gradient(135deg, var(--surface) 0%, var(--surface-light) 100%);
+        }
+
+        .tab-icon {
+            font-size: 1.2rem;
+        }
+
+        .panel {
+            display: none;
+            background: var(--surface);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .panel.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px 15px;
+            background: var(--background);
+            border: 2px solid var(--surface-light);
+            border-radius: var(--border-radius);
+            color: var(--text);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            display: block;
+            padding: 15px;
+            background: var(--background);
+            border: 2px dashed var(--surface-light);
+            border-radius: var(--border-radius);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-label:hover {
+            border-color: var(--primary);
+            background: var(--surface-light);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: var(--shadow);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: var(--surface-light);
+        }
+
+        .result-section {
+            margin-top: 30px;
+            padding: 25px;
+            background: var(--background);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--surface-light);
+        }
+
+        .result-section h3 {
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+
+        .audio-player {
+            width: 100%;
+            margin: 15px 0;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .info-item {
+            background: var(--surface);
+            padding: 15px;
+            border-radius: var(--border-radius);
+        }
+
+        .info-item label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+
+        .info-item value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .voices-list {
+            display: grid;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .voice-card {
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .voice-card:hover {
+            border-color: var(--primary);
+            transform: translateX(5px);
+        }
+
+        .voice-info h4 {
+            margin-bottom: 5px;
+        }
+
+        .voice-info p {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .voice-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-small {
+            padding: 8px 15px;
+            font-size: 0.85rem;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .models-info {
+            background: var(--background);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+        }
+
+        .models-info h4 {
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+
+        .model-tag {
+            display: inline-block;
+            background: var(--surface-light);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .tabs {
+                justify-content: flex-start;
+                overflow-x: auto;
+            }
+            
+            header h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔊 Qwen3-TTS Studio</h1>
+            <p>Interfaz web para síntesis de voz con IA - Clona, diseña y genera voces</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="indicator"></span>
+                <span id="server-status">Conectando...</span>
+            </div>
+            <div class="status-item">
+                <span>🎮</span>
+                <span id="gpu-info">GPU: --</span>
+            </div>
+            <div class="status-item">
+                <span>💾</span>
+                <span id="vram-info">VRAM: --</span>
+            </div>
+        </div>
+
+        <div id="alert-box" class="alert"></div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showPanel('custom')">
+                <span class="tab-icon">🎭</span>
+                <span>Voz Predefinida</span>
+            </div>
+            <div class="tab" onclick="showPanel('design')">
+                <span class="tab-icon">✨</span>
+                <span>Diseñar Voz</span>
+            </div>
+            <div class="tab" onclick="showPanel('clone-url')">
+                <span class="tab-icon">📎</span>
+                <span>Clonar (URL)</span>
+            </div>
+            <div class="tab" onclick="showPanel('clone-file')">
+                <span class="tab-icon">📁</span>
+                <span>Clonar (Archivo)</span>
+            </div>
+            <div class="tab" onclick="showPanel('voices')">
+                <span class="tab-icon">🎙️</span>
+                <span>Voces Guardadas</span>
+            </div>
+        </div>
+
+        <!-- Panel: Custom Voice -->
+        <div id="panel-custom" class="panel active">
+            <h2>🎭 Generar Voz Predefinida</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Usa personajes preestablecidos como Vivian, Ryan, etc.</p>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Personaje</label>
+                    <select id="custom-speaker">
+                        <option value="Vivian">Vivian (Femenino, Chino)</option>
+                        <option value="Serena">Serena (Femenino, Inglés)</option>
+                        <option value="Uncle_Fu">Uncle Fu (Masculino, Chino)</option>
+                        <option value="Dylan">Dylan (Masculino, Inglés)</option>
+                        <option value="Eric">Eric (Masculino, Profesional)</option>
+                        <option value="Ryan" selected>Ryan (Masculino, Conversacional)</option>
+                        <option value="Aiden">Aiden (Masculino, Versátil)</option>
+                        <option value="Ono_Anna">Ono Anna (Femenino, Japonés)</option>
+                        <option value="Sohee">Sohee (Femenino, Coreano)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Idioma</label>
+                    <select id="custom-language">
+                        <option value="Auto">Auto-detectar</option>
+                        <option value="Spanish" selected>Español</option>
+                        <option value="English">Inglés</option>
+                        <option value="Chinese">Chino</option>
+                        <option value="Japanese">Japonés</option>
+                        <option value="Korean">Coreano</option>
+                        <option value="French">Francés</option>
+                        <option value="German">Alemán</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Texto a convertir</label>
+                <textarea id="custom-text" placeholder="Escribe el texto que quieres convertir a voz...">Hola, esta es una prueba de síntesis de voz con Qwen3-TTS.</textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Instrucción opcional (estilo/emoción)</label>
+                <input type="text" id="custom-instruction" placeholder="Ej: Habla con entusiasmo y energía">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Tamaño de modelo</label>
+                    <select id="custom-model">
+                        <option value="1.7B" selected>1.7B (Mejor calidad)</option>
+                        <option value="0.6B">0.6B (Más rápido)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Formato de salida</label>
+                    <select id="custom-format">
+                        <option value="wav" selected>WAV</option>
+                        <option value="mp3">MP3</option>
+                        <option value="ogg">OGG/OPUS</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn" onclick="generateCustomVoice()">
+                <span>🎵</span>
+                <span>Generar Voz</span>
+            </button>
+
+            <div id="custom-result" class="result-section" style="display: none;">
+                <!-- Resultado se inserta aquí -->
+            </div>
+        </div>
+
+        <!-- Panel: Voice Design -->
+        <div id="panel-design" class="panel">
+            <h2>✨ Diseñar Voz por Descripción</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Describe la voz que deseas en lenguaje natural</p>
+
+            <div class="form-group">
+                <label>Descripción de la voz</label>
+                <textarea id="design-description" placeholder="Ej: gender: Female, pitch: High and sweet, speed: Moderate, age: Young adult, emotion: Cheerful, tone: Friendly">gender: Male, pitch: Deep and resonant, speed: Slow and deliberate, age: Middle-aged, emotion: Contemplative, tone: Mysterious</textarea>
+                <small style="color: var(--text-muted);">Incluye: gender, pitch, speed, age, emotion, tone</small>
+            </div>
+
+            <div class="form-group">
+                <label>Texto a convertir</label>
+                <textarea id="design-text" placeholder="Escribe el texto...">Bienvenido al futuro de la síntesis de voz.</textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Idioma</label>
+                    <select id="design-language">
+                        <option value="Spanish" selected>Español</option>
+                        <option value="English">Inglés</option>
+                        <option value="Chinese">Chino</option>
+                        <option value="Japanese">Japonés</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Formato</label>
+                    <select id="design-format">
+                        <option value="wav" selected>WAV</option>
+                        <option value="mp3">MP3</option>
+                        <option value="ogg">OGG</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn" onclick="generateVoiceDesign()">
+                <span>✨</span>
+                <span>Diseñar y Generar</span>
+            </button>
+
+            <div id="design-result" class="result-section" style="display: none;"></div>
+        </div>
+
+        <!-- Panel: Clone from URL -->
+        <div id="panel-clone-url" class="panel">
+            <h2>📎 Clonar Voz desde URL</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Usa un archivo de audio de referencia disponible en una URL</p>
+
+            <div class="form-group">
+                <label>URL del audio de referencia</label>
+                <input type="url" id="clone-url-audio" placeholder="https://ejemplo.com/audio-reference.mp3">
+                <small style="color: var(--text-muted);">Audio de 3-10 segundos, voz clara sin música de fondo</small>
+            </div>
+
+            <div class="form-group">
+                <label>Texto del audio de referencia</label>
+                <input type="text" id="clone-url-ref-text" placeholder="Escribe exactamente lo que dice el audio de referencia">
+            </div>
+
+            <div class="form-group">
+                <label>Texto a convertir con la voz clonada</label>
+                <textarea id="clone-url-text" placeholder="Texto que quieres convertir usando la voz clonada..."></textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Idioma</label>
+                    <select id="clone-url-language">
+                        <option value="Spanish" selected>Español</option>
+                        <option value="English">Inglés</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Formato</label>
+                    <select id="clone-url-format">
+                        <option value="wav" selected>WAV</option>
+                        <option value="mp3">MP3</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="clone-url-save" style="width: auto;">
+                    <span>Guardar esta voz para uso futuro</span>
+                </label>
+            </div>
+
+            <div id="clone-url-save-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nombre de la voz</label>
+                        <input type="text" id="clone-url-name" placeholder="Ej: Mi Voz">
+                    </div>
+                    <div class="form-group">
+                        <label>Descripción</label>
+                        <input type="text" id="clone-url-desc" placeholder="Descripción opcional">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" onclick="cloneVoiceFromURL()">
+                <span>🎙️</span>
+                <span>Clonar y Generar</span>
+            </button>
+
+            <div id="clone-url-result" class="result-section" style="display: none;"></div>
+        </div>
+
+        <!-- Panel: Clone from File -->
+        <div id="panel-clone-file" class="panel">
+            <h2>📁 Clonar Voz desde Archivo</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Sube un archivo de audio de tu dispositivo</p>
+
+            <div class="form-group">
+                <label>Archivo de audio de referencia</label>
+                <div class="file-input-wrapper">
+                    <input type="file" id="clone-file-input" accept="audio/*" onchange="updateFileLabel(this)">
+                    <label for="clone-file-input" class="file-input-label" id="clone-file-label">
+                        📁 Arrastra o haz clic para seleccionar archivo (MP3, WAV, OGG)
+                    </label>
+                </div>
+                <small style="color: var(--text-muted);">3-10 segundos, voz clara, sin música</small>
+            </div>
+
+            <div class="form-group">
+                <label>Texto del audio de referencia</label>
+                <input type="text" id="clone-file-ref-text" placeholder="Escribe exactamente lo que dice el audio">
+            </div>
+
+            <div class="form-group">
+                <label>Texto a convertir con la voz clonada</label>
+                <textarea id="clone-file-text" placeholder="Texto que quieres convertir..."></textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Idioma</label>
+                    <select id="clone-file-language">
+                        <option value="Spanish" selected>Español</option>
+                        <option value="English">Inglés</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Formato</label>
+                    <select id="clone-file-format">
+                        <option value="wav" selected>WAV</option>
+                        <option value="mp3">MP3</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn" onclick="cloneVoiceFromFile()">
+                <span>🎙️</span>
+                <span>Clonar y Generar</span>
+            </button>
+
+            <div id="clone-file-result" class="result-section" style="display: none;"></div>
+        </div>
+
+        <!-- Panel: Saved Voices -->
+        <div id="panel-voices" class="panel">
+            <h2>🎙️ Voces Clonadas Guardadas</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Gestiona y usa tus voces clonadas persistentes</p>
+
+            <button class="btn btn-secondary" onclick="loadSavedVoices()" style="margin-bottom: 20px;">
+                <span>🔄</span>
+                <span>Actualizar Lista</span>
+            </button>
+
+            <div id="voices-list" class="voices-list">
+                <p style="text-align: center; color: var(--text-muted);">Cargando voces...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuración
+        const API_URL = window.location.origin.replace(':8081', ':8080') + '/api/v1';
+        
+        // Estado
+        let savedVoices = [];
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+            checkServerStatus();
+            setInterval(checkServerStatus, 30000); // Cada 30 segundos
+            
+            // Toggle save fields
+            document.getElementById('clone-url-save').addEventListener('change', (e) => {
+                document.getElementById('clone-url-save-fields').style.display = 
+                    e.target.checked ? 'block' : 'none';
+            });
+        });
+
+        // Mostrar panel
+        function showPanel(panelId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            
+            event.target.closest('.tab').classList.add('active');
+            document.getElementById('panel-' + panelId).classList.add('active');
+            
+            if (panelId === 'voices') {
+                loadSavedVoices();
+            }
+        }
+
+        // Mostrar alerta
+        function showAlert(message, type = 'success') {
+            const alert = document.getElementById('alert-box');
+            alert.className = 'alert alert-' + type + ' show';
+            alert.textContent = message;
+            setTimeout(() => alert.classList.remove('show'), 5000);
+        }
+
+        // Actualizar label de archivo
+        function updateFileLabel(input) {
+            const label = document.getElementById('clone-file-label');
+            if (input.files && input.files[0]) {
+                label.textContent = '📄 ' + input.files[0].name;
+            }
+        }
+
+        // Verificar estado del servidor
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                
+                document.getElementById('server-status').textContent = 'Servidor Online';
+                document.getElementById('gpu-info').textContent = 
+                    'GPU: ' + (data.gpu_name || data.cuda_available ? 'CUDA' : 'CPU');
+                
+                // Obtener info de VRAM
+                const modelsResp = await fetch(`${API_URL}/models`);
+                const modelsData = await modelsResp.json();
+                if (modelsData.gpu_info) {
+                    document.getElementById('vram-info').textContent = 
+                        `VRAM: ${modelsData.gpu_info.allocated_memory_gb || '--'} / ${modelsData.gpu_info.total_memory_gb || '--'} GB`;
+                }
+            } catch (error) {
+                document.getElementById('server-status').textContent = '❌ Sin conexión';
+                document.getElementById('gpu-info').textContent = 'GPU: --';
+                document.getElementById('vram-info').textContent = 'VRAM: --';
+            }
+        }
+
+        // Generar Custom Voice
+        async function generateCustomVoice() {
+            const btn = event.target.closest('.btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> Generando...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/tts/custom`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: document.getElementById('custom-text').value,
+                        speaker: document.getElementById('custom-speaker').value,
+                        language: document.getElementById('custom-language').value,
+                        instruction: document.getElementById('custom-instruction').value || null,
+                        model_size: document.getElementById('custom-model').value,
+                        output_format: document.getElementById('custom-format').value
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult('custom-result', data);
+                    showAlert('✅ Voz generada exitosamente');
+                } else {
+                    showAlert('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error de conexión: ' + error.message, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Generar Voice Design
+        async function generateVoiceDesign() {
+            const btn = event.target.closest('.btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> Diseñando...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/tts/design`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: document.getElementById('design-text').value,
+                        voice_description: document.getElementById('design-description').value,
+                        language: document.getElementById('design-language').value,
+                        output_format: document.getElementById('design-format').value
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult('design-result', data);
+                    showAlert('✅ Voz diseñada exitosamente');
+                } else {
+                    showAlert('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error de conexión: ' + error.message, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Clonar desde URL
+        async function cloneVoiceFromURL() {
+            const saveVoice = document.getElementById('clone-url-save').checked;
+            
+            if (saveVoice) {
+                await createAndSaveVoice();
+            } else {
+                await generateCloneFromURL();
+            }
+        }
+
+        // Crear y guardar voz
+        async function createAndSaveVoice() {
+            const btn = event.target.closest('.btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> Creando voz...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/cloned-voices`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: document.getElementById('clone-url-name').value || 'Voz Clonada',
+                        description: document.getElementById('clone-url-desc').value || '',
+                        ref_audio_url: document.getElementById('clone-url-audio').value,
+                        ref_text: document.getElementById('clone-url-ref-text').value,
+                        language: document.getElementById('clone-url-language').value
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✅ ' + data.message);
+                    document.getElementById('clone-url-result').innerHTML = `
+                        <h3>🎙️ Voz Guardada</h3>
+                        <p><strong>ID:</strong> ${data.voice.id}</p>
+                        <p><strong>Nombre:</strong> ${data.voice.name}</p>
+                        <p>Usa este ID en la pestaña "Voces Guardadas" para generar audio.</p>
+                    `;
+                    document.getElementById('clone-url-result').style.display = 'block';
+                } else {
+                    showAlert('❌ Error: ' + (data.message || 'No se pudo guardar'), 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error de conexión: ' + error.message, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Generar clone desde URL (sin guardar)
+        async function generateCloneFromURL() {
+            const btn = event.target.closest('.btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> Clonando...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/tts/clone/url`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: document.getElementById('clone-url-text').value,
+                        ref_audio_url: document.getElementById('clone-url-audio').value,
+                        ref_text: document.getElementById('clone-url-ref-text').value,
+                        language: document.getElementById('clone-url-language').value,
+                        output_format: document.getElementById('clone-url-format').value
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult('clone-url-result', data);
+                    showAlert('✅ Voz clonada exitosamente');
+                } else {
+                    showAlert('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error de conexión: ' + error.message, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Clonar desde archivo
+        async function cloneVoiceFromFile() {
+            const fileInput = document.getElementById('clone-file-input');
+            if (!fileInput.files || !fileInput.files[0]) {
+                showAlert('❌ Selecciona un archivo de audio', 'error');
+                return;
+            }
+
+            const btn = event.target.closest('.btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> Clonando...';
+            btn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('text', document.getElementById('clone-file-text').value);
+                formData.append('ref_text', document.getElementById('clone-file-ref-text').value);
+                formData.append('language', document.getElementById('clone-file-language').value);
+                formData.append('output_format', document.getElementById('clone-file-format').value);
+                formData.append('ref_audio', fileInput.files[0]);
+
+                const response = await fetch(`${API_URL}/tts/clone/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult('clone-file-result', data);
+                    showAlert('✅ Voz clonada exitosamente');
+                } else {
+                    showAlert('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error de conexión: ' + error.message, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Mostrar resultado con reproductor
+        function showResult(elementId, data) {
+            const resultDiv = document.getElementById(elementId);
+            const audioSrc = 'data:audio/wav;base64,' + data.audio_base64;
+            
+            resultDiv.innerHTML = `
+                <h3>🎵 Audio Generado</h3>
+                <audio controls class="audio-player">
+                    <source src="${audioSrc}" type="audio/wav">
+                    Tu navegador no soporta audio.
+                </audio>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>Duración</label>
+                        <value>${data.duration_seconds?.toFixed(2)}s</value>
+                    </div>
+                    <div class="info-item">
+                        <label>Sample Rate</label>
+                        <value>${data.sample_rate}Hz</value>
+                    </div>
+                    <div class="info-item">
+                        <label>Tiempo de procesamiento</label>
+                        <value>${data.processing_time_seconds?.toFixed(2)}s</value>
+                    </div>
+                    <div class="info-item">
+                        <label>Modelo</label>
+                        <value>${data.model_used}</value>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <a href="${audioSrc}" download="audio_generado.wav" class="btn btn-secondary btn-small">
+                        <span>💾</span>
+                        <span>Descargar</span>
+                    </a>
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+        }
+
+        // Cargar voces guardadas
+        async function loadSavedVoices() {
+            const listDiv = document.getElementById('voices-list');
+            listDiv.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
+
+            try {
+                const response = await fetch(`${API_URL}/cloned-voices`);
+                const data = await response.json();
+                
+                savedVoices = data.voices || [];
+                
+                if (savedVoices.length === 0) {
+                    listDiv.innerHTML = `
+                        <p style="text-align: center; color: var(--text-muted); padding: 40px;">
+                            No hay voces guardadas.<br>
+                            Usa "Clonar (URL)" y marca "Guardar esta voz" para crear una.
+                        </p>
+                    `;
+                    return;
+                }
+
+                listDiv.innerHTML = savedVoices.map(voice => `
+                    <div class="voice-card">
+                        <div class="voice-info">
+                            <h4>${voice.name}</h4>
+                            <p>${voice.description || 'Sin descripción'} • ID: ${voice.id} • Usos: ${voice.use_count || 0}</p>
+                        </div>
+                        <div class="voice-actions">
+                            <button class="btn btn-secondary btn-small" onclick="showGenerateDialog('${voice.id}', '${voice.name}')">
+                                <span>🎵</span>
+                                <span>Usar</span>
+                            </button>
+                            <button class="btn btn-secondary btn-small" onclick="deleteVoice('${voice.id}')" style="background: var(--error);">
+                                <span>🗑️</span>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                listDiv.innerHTML = `<p style="text-align: center; color: var(--error);">Error cargando voces: ${error.message}</p>`;
+            }
+        }
+
+        // Mostrar diálogo para generar con voz guardada
+        function showGenerateDialog(voiceId, voiceName) {
+            const text = prompt(`🎙️ Generar audio con voz: ${voiceName}\n\nEscribe el texto a convertir:`);
+            if (!text) return;
+            
+            generateWithSavedVoice(voiceId, text);
+        }
+
+        // Generar con voz guardada
+        async function generateWithSavedVoice(voiceId, text) {
+            showAlert('🎵 Generando audio...');
+            
+            try {
+                const response = await fetch(`${API_URL}/tts/cloned-voice/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        voice_id: voiceId,
+                        text: text,
+                        language: 'Spanish',
+                        output_format: 'wav'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Crear modal temporal para mostrar resultado
+                    const modal = document.createElement('div');
+                    modal.style.cssText = `
+                        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                        background: rgba(0,0,0,0.8); z-index: 1000; display: flex;
+                        align-items: center; justify-content: center; padding: 20px;
+                    `;
+                    modal.innerHTML = `
+                        <div style="background: var(--surface); padding: 30px; border-radius: var(--border-radius); max-width: 500px; width: 100%;">
+                            <h3 style="margin-bottom: 20px;">🎵 Audio Generado</h3>
+                            <audio controls style="width: 100%; margin-bottom: 20px;">
+                                <source src="data:audio/wav;base64,${data.audio_base64}" type="audio/wav">
+                            </audio>
+                            <p><strong>Duración:</strong> ${data.duration_seconds?.toFixed(2)}s</p>
+                            <p><strong>Tiempo:</strong> ${data.processing_time_seconds?.toFixed(2)}s</p>
+                            <button onclick="this.closest('.modal').remove()" class="btn" style="margin-top: 20px; width: 100%;">Cerrar</button>
+                        </div>
+                    `;
+                    modal.className = 'modal';
+                    document.body.appendChild(modal);
+                    
+                    showAlert('✅ Audio generado exitosamente');
+                    loadSavedVoices(); // Actualizar contador de usos
+                } else {
+                    showAlert('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        // Eliminar voz
+        async function deleteVoice(voiceId) {
+            if (!confirm('¿Eliminar esta voz permanentemente?')) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/cloned-voices/${voiceId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✅ Voz eliminada');
+                    loadSavedVoices();
+                } else {
+                    showAlert('❌ Error al eliminar', 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error: ' + error.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
