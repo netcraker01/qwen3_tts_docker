@@ -790,12 +790,28 @@ class TTSService:
             ref_audio_file: Contenido del archivo de audio (bytes)
             ref_text: Texto correspondiente al audio
             language: Idioma del texto
-            model_size: Tamaño del modelo a usar
+            model_size: Tamaño del modelo a usar (0.6B recomendado para RTX 3060)
         
         Returns:
             AudioResult con el audio generado
         """
         import subprocess
+        
+        # Para voice clone, usar 0.6B por defecto si no se especifica (menos uso de memoria)
+        size = model_size or "0.6B"
+        
+        # Limpieza agresiva de memoria antes de voice clone
+        logger.info("Limpieza agresiva de memoria antes de voice clone...")
+        self._cleanup_memory()
+        
+        # Doble limpieza para voice clone (operación más pesada)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            import time
+            time.sleep(1.0)  # Esperar 1 segundo completo
+        
+        logger.info(f"Memoria antes de voice clone: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
         
         # Guardar archivo temporal con extensión genérica
         with tempfile.NamedTemporaryFile(suffix=".audio", delete=False) as tmp_input:
@@ -826,8 +842,8 @@ class TTSService:
             logger.info(f"Audio convertido exitosamente a WAV: {wav_path}")
             
             # Crear prompt y generar usando el WAV convertido
-            prompt_id = self.create_voice_clone_prompt(wav_path, ref_text, model_size)
-            result = self.generate_voice_clone(text, prompt_id, language, model_size)
+            prompt_id = self.create_voice_clone_prompt(wav_path, ref_text, size)
+            result = self.generate_voice_clone(text, prompt_id, language, size)
             return result
             
         finally:
