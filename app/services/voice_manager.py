@@ -21,10 +21,10 @@ class ClonedVoice:
     ref_audio_path: str
     ref_text: str
     language: str
-    prompt_data: Any  # El objeto prompt de Qwen3TTS
     created_at: str
     last_used: str
     use_count: int = 0
+    prompt_data: Any = None  # El objeto prompt de Qwen3TTS (opcional, no se serializa)
     
     def to_dict(self) -> Dict:
         """Convierte a diccionario (el prompt_data no se serializa)."""
