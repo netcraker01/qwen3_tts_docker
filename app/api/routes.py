@@ -686,57 +686,52 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         # Usar el idioma de la voz si no se especificó otro
         language = request.language or voice.language
         
-        # Cargar modelo voice_clone del tamaño especificado
+        # Determinar tamaño del modelo
         model_size = request.model_size or "1.7B"
         
-        # Limpiar memoria antes de cargar modelo
+        logger.info(f"Generando con voz clonada {request.voice_id}, modelo: {model_size}")
+        
+        # LIMPIEZA AGRESIVA antes de empezar
         tts_service._immediate_cleanup()
         
-        # Cargar el modelo especificado con manejo correcto de memoria
-        if model_size == "0.6B":
-            # Para 0.6B, cargar específicamente ese modelo
-            model = tts_service._get_model("voice_clone", "0.6B")
-        else:
-            # Por defecto 1.7B
-            model = tts_service._get_model("voice_clone", "1.7B")
+        # Crear un prompt_id temporal para reusar el prompt existente
+        temp_prompt_id = f"temp_{request.voice_id}_{int(time.time())}"
+        tts_service._voice_clone_prompts[temp_prompt_id] = prompt_data
         
-        # Generar audio directamente con el prompt guardado
-        wavs, sr = model.generate_voice_clone(
-            text=request.text,
-            language=language,
-            voice_clone_prompt=prompt_data
-        )
-        
-        audio_data = wavs[0]
-        duration = len(audio_data) / sr
-        
-        # Crear AudioResult
-        from app.services.tts_service import AudioResult
-        audio_result = AudioResult(
-            audio_data=audio_data,
-            sample_rate=sr,
-            duration_seconds=duration,
-            model_used="1.7B_cloned_voice_reused"
-        )
-        
-        # Convertir a base64
-        audio_base64 = tts_service.audio_to_base64(audio_result, request.output_format)
-        
-        processing_time = time.time() - start_time
-        
-        return TTSResponse(
-            success=True,
-            audio_base64=audio_base64,
-            sample_rate=audio_result.sample_rate,
-            duration_seconds=audio_result.duration_seconds,
-            model_used=audio_result.model_used,
-            processing_time_seconds=processing_time
-        )
+        try:
+            # Usar el método del servicio que ya maneja limpieza automática
+            audio_result = tts_service.generate_voice_clone(
+                text=request.text,
+                voice_clone_prompt_id=temp_prompt_id,
+                language=language,
+                model_size=model_size
+            )
+            
+            # Convertir a base64
+            audio_base64 = tts_service.audio_to_base64(audio_result, request.output_format)
+            
+            processing_time = time.time() - start_time
+            
+            return TTSResponse(
+                success=True,
+                audio_base64=audio_base64,
+                sample_rate=audio_result.sample_rate,
+                duration_seconds=audio_result.duration_seconds,
+                model_used=audio_result.model_used,
+                processing_time_seconds=processing_time
+            )
+            
+        finally:
+            # Limpiar prompt temporal
+            if temp_prompt_id in tts_service._voice_clone_prompts:
+                del tts_service._voice_clone_prompts[temp_prompt_id]
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error generando desde voz clonada: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return TTSResponse(
             success=False,
             error=str(e),
