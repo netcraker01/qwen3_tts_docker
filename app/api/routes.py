@@ -688,15 +688,17 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         
         # Cargar modelo voice_clone del tamaño especificado
         model_size = request.model_size or "1.7B"
-        model_key = f"{model_size}_voice_clone"
         
-        # Cargar el modelo especificado
-        if model_size == "0.6B" and "0.6B" not in tts_service.loaded_models:
-            model = tts_service._load_model("0.6B", "voice_clone")
-        elif model_size == "1.7B":
-            model = tts_service._get_model("voice_clone")
+        # Limpiar memoria antes de cargar modelo
+        tts_service._immediate_cleanup()
+        
+        # Cargar el modelo especificado con manejo correcto de memoria
+        if model_size == "0.6B":
+            # Para 0.6B, cargar específicamente ese modelo
+            model = tts_service._get_model("voice_clone", "0.6B")
         else:
-            model = tts_service._get_model("voice_clone")
+            # Por defecto 1.7B
+            model = tts_service._get_model("voice_clone", "1.7B")
         
         # Generar audio directamente con el prompt guardado
         wavs, sr = model.generate_voice_clone(
