@@ -531,6 +531,39 @@ docker cp download_models.py qwen3-tts:/tmp/
 docker-compose exec qwen3-tts python3.10 /tmp/download_models.py
 ```
 
+### Error: `Can't load feature extractor for ... speech_tokenizer`
+**Causa:** Los archivos del modelo se descargaron incompletos. Esto es un problema conocido con la biblioteca `qwen-tts`.
+
+**Solución rápida:** Ejecutar el script de corrección dentro del contenedor:
+```bash
+# Copiar y ejecutar el script de fix
+docker cp fix_model_files.sh qwen3-tts:/tmp/
+docker-compose exec qwen3-tts bash /tmp/fix_model_files.sh
+```
+
+**Solución manual:** Copiar los archivos faltantes:
+```bash
+# Para CustomVoice
+docker exec qwen3-tts bash -c '
+SRC="/app/models/models--Qwen--Qwen3-TTS-12Hz-1.7B-CustomVoice/snapshots/0c0e3051f131929182e2c023b9537f8b1c68adfe/speech_tokenizer"
+DST="/app/models/hub/models--Qwen--Qwen3-TTS-12Hz-1.7B-CustomVoice/snapshots/0c0e3051f131929182e2c023b9537f8b1c68adfe/speech_tokenizer"
+mkdir -p "$DST"
+cp "$SRC/preprocessor_config.json" "$DST/"
+cp "$SRC/configuration.json" "$DST/"
+cp -L "$SRC/model.safetensors" "$DST/"
+'
+
+# Para VoiceDesign
+docker exec qwen3-tts bash -c '
+SRC="/app/models/models--Qwen--Qwen3-TTS-12Hz-1.7B-VoiceDesign/snapshots/5ecdb67327fd37bb2e042aab12ff7391903235d3/speech_tokenizer"
+DST="/app/models/hub/models--Qwen--Qwen3-TTS-12Hz-1.7B-VoiceDesign/snapshots/5ecdb67327fd37bb2e042aab12ff7391903235d3/speech_tokenizer"
+mkdir -p "$DST"
+cp "$SRC/preprocessor_config.json" "$DST/"
+cp "$SRC/configuration.json" "$DST/"
+cp -L "$SRC/model.safetensors" "$DST/"
+'
+```
+
 ### Error: `Connection refused` al llamar a la API
 **Solución:** El servicio aún está iniciando o hay un error.
 ```bash
