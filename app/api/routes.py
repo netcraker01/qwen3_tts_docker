@@ -722,14 +722,17 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         
         try:
             # Determinar parámetros de generación
+            logger.info(f"Request use_voice_defaults: {request.use_voice_defaults}")
+            logger.info(f"Voice generation_params: {voice.generation_params}")
+            
             if request.use_voice_defaults and voice.generation_params:
                 # Usar los parámetros guardados con la voz
                 generation_params = voice.generation_params
-                logger.info(f"Usando parámetros guardados con la voz: {generation_params}")
+                logger.info(f"✅ Usando parámetros GUARDADOS con la voz: {generation_params}")
             else:
                 # Usar los parámetros de esta petición
                 generation_params = request.to_generation_kwargs()
-                logger.info(f"Usando parámetros de la petición: {generation_params}")
+                logger.info(f"✅ Usando parámetros de la PETICIÓN: {generation_params}")
             
             # Usar el método del servicio que ya maneja limpieza automática
             logger.info("Llamando a generate_voice_clone...")
