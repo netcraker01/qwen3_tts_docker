@@ -72,12 +72,13 @@ async def generate_custom_voice(request: CustomVoiceRequest):
         start_time = time.time()
         tts_service = get_tts_service()
         
-        # Generar audio
+        # Generar audio con parámetros de generación
         audio_result = tts_service.generate_custom_voice(
             text=request.text,
             speaker=request.speaker,
             language=request.language,
-            instruction=request.instruction
+            instruction=request.instruction,
+            generation_params=request.to_generation_kwargs()
         )
         
         # Convertir a base64
@@ -137,11 +138,12 @@ async def generate_voice_design(request: VoiceDesignRequest):
         start_time = time.time()
         tts_service = get_tts_service()
         
-        # Generar audio
+        # Generar audio con parámetros de generación
         audio_result = tts_service.generate_voice_design(
             text=request.text,
             voice_description=request.voice_description,
-            language=request.language
+            language=request.language,
+            generation_params=request.to_generation_kwargs()
         )
         
         # Convertir a base64
@@ -199,11 +201,12 @@ async def clone_voice_from_url(request: VoiceCloneRequest):
             ref_text=request.ref_text
         )
         
-        # Generar audio clonado
+        # Generar audio clonado con parámetros de generación
         audio_result = tts_service.generate_voice_clone(
             text=request.text,
             voice_clone_prompt_id=prompt_id,
-            language=request.language
+            language=request.language,
+            generation_params=request.to_generation_kwargs()
         )
         
         # Convertir a base64
@@ -532,13 +535,15 @@ async def create_cloned_voice(request: CreateClonedVoiceRequest):
             raise HTTPException(status_code=500, detail="No se pudo crear el prompt de voz")
         
         # Guardar en el VoiceManager (usar una URL placeholder ya que el audio ya se procesó)
+        # Guardar los parámetros de generación por defecto
         voice = voice_manager.create_voice(
             name=request.name,
             description=request.description,
             ref_audio_path="internal://voice_prompt/" + prompt_id,  # URL interna
             ref_text=request.ref_text,
             language=request.language,
-            prompt_data=prompt_data
+            prompt_data=prompt_data,
+            generation_params=request.to_generation_kwargs()
         )
         
         # Limpiar archivo temporal si era data URL
@@ -604,7 +609,7 @@ async def get_cloned_voice(voice_id: str):
     "/cloned-voices/{voice_id}",
     response_model=dict,
     summary="Actualizar voz clonada",
-    description="Actualiza el nombre o descripción de una voz clonada.",
+    description="Actualiza el nombre, descripción o parámetros de generación de una voz clonada.",
     tags=["Cloned Voices Management"]
 )
 async def update_cloned_voice(voice_id: str, request: UpdateClonedVoiceRequest):
@@ -614,7 +619,8 @@ async def update_cloned_voice(voice_id: str, request: UpdateClonedVoiceRequest):
     voice = voice_manager.update_voice(
         voice_id=voice_id,
         name=request.name,
-        description=request.description
+        description=request.description,
+        generation_params=request.generation_params
     )
     
     if not voice:
@@ -715,13 +721,24 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         logger.info(f"Prompt guardado en servicio. Total prompts: {len(tts_service._voice_clone_prompts)}")
         
         try:
+            # Determinar parámetros de generación
+            if request.use_voice_defaults and voice.generation_params:
+                # Usar los parámetros guardados con la voz
+                generation_params = voice.generation_params
+                logger.info(f"Usando parámetros guardados con la voz: {generation_params}")
+            else:
+                # Usar los parámetros de esta petición
+                generation_params = request.to_generation_kwargs()
+                logger.info(f"Usando parámetros de la petición: {generation_params}")
+            
             # Usar el método del servicio que ya maneja limpieza automática
             logger.info("Llamando a generate_voice_clone...")
             audio_result = tts_service.generate_voice_clone(
                 text=request.text,
                 voice_clone_prompt_id=temp_prompt_id,
                 language=language,
-                model_size=model_size
+                model_size=model_size,
+                generation_params=generation_params
             )
             logger.info(f"Audio generado exitosamente: {audio_result.duration_seconds}s")
             
