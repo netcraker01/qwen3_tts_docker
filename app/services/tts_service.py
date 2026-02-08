@@ -502,8 +502,8 @@ class TTSService:
                     **load_kwargs
                 )
                 
-                # Poner modelo en modo eval para reducir uso de memoria
-                model.eval()
+                # El modelo Qwen3TTSModel no requiere llamada a eval()
+                # ya que no es un nn.Module estándar de PyTorch
                 
                 self._models[cache_key] = model
                 logger.info(f"Modelo {model_id} cargado exitosamente")
