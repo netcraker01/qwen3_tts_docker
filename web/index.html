@@ -621,6 +621,46 @@
                 </select>
             </div>
 
+            <!-- Ajustes Avanzados -->
+            <div class="form-group" style="margin-top: 20px;">
+                <label style="cursor: pointer;" onclick="toggleAdvanced('use-voice-advanced')">
+                    ⚙️ Ajustes Avanzados (click para expandir)
+                </label>
+                <div id="use-voice-advanced" style="display: none; background: var(--background); padding: 15px; border-radius: var(--border-radius); margin-top: 10px;">
+                    <div class="form-group" style="margin-bottom: 15px;">
+                        <label>
+                            <input type="checkbox" id="use-voice-defaults" checked onchange="toggleVoiceParams()">
+                            Usar parámetros guardados con la voz
+                        </label>
+                    </div>
+                    <div id="voice-custom-params">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Temperature: <span id="use-voice-temp-val">0.9</span></label>
+                                <input type="range" id="use-voice-temperature" min="0.1" max="2.0" step="0.1" value="0.9" oninput="document.getElementById('use-voice-temp-val').textContent=this.value">
+                            </div>
+                            <div class="form-group">
+                                <label>Top P: <span id="use-voice-topp-val">1.0</span></label>
+                                <input type="range" id="use-voice-top-p" min="0.0" max="1.0" step="0.05" value="1.0" oninput="document.getElementById('use-voice-topp-val').textContent=this.value">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Top K: <span id="use-voice-topk-val">50</span></label>
+                                <input type="range" id="use-voice-top-k" min="1" max="100" step="1" value="50" oninput="document.getElementById('use-voice-topk-val').textContent=this.value">
+                            </div>
+                            <div class="form-group">
+                                <label>Repetition Penalty: <span id="use-voice-rep-val">1.05</span></label>
+                                <input type="range" id="use-voice-repetition-penalty" min="1.0" max="2.0" step="0.05" value="1.05" oninput="document.getElementById('use-voice-rep-val').textContent=this.value">
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-success btn-small" onclick="saveVoiceParams()" style="margin-top: 10px; width: 100%;">
+                        💾 Guardar ajustes como predeterminados
+                    </button>
+                </div>
+            </div>
+
             <button class="btn" onclick="generateFromClonedVoice()" id="btn-use-voice" disabled>
                 <span>🎵</span>
                 <span>Generar con Voz Seleccionada</span>
@@ -784,6 +824,47 @@
             el.style.display = el.style.display === 'none' ? 'block' : 'none';
         }
 
+        function toggleVoiceParams() {
+            const useDefaults = document.getElementById('use-voice-defaults').checked;
+            const paramsDiv = document.getElementById('voice-custom-params');
+            paramsDiv.style.opacity = useDefaults ? '0.5' : '1';
+            paramsDiv.querySelectorAll('input').forEach(input => {
+                input.disabled = useDefaults;
+            });
+        }
+
+        async function saveVoiceParams() {
+            const voiceId = document.getElementById('use-voice-select').value;
+            if (!voiceId) {
+                showAlert('Selecciona una voz primero', 'warning');
+                return;
+            }
+
+            const params = {
+                temperature: parseFloat(document.getElementById('use-voice-temperature').value),
+                top_p: parseFloat(document.getElementById('use-voice-top-p').value),
+                top_k: parseInt(document.getElementById('use-voice-top-k').value),
+                repetition_penalty: parseFloat(document.getElementById('use-voice-repetition-penalty').value)
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/cloned-voices/${voiceId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ generation_params: params })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showAlert('✅ Ajustes guardados como predeterminados para esta voz');
+                } else {
+                    showAlert('❌ Error al guardar ajustes', 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error de conexión', 'error');
+            }
+        }
+
         function showAlert(message, type = 'success') {
             const alert = document.getElementById('alert-box');
             alert.className = 'alert alert-' + type + ' show';
@@ -936,17 +1017,29 @@
             btn.innerHTML = '<span>⏳</span> Generando...';
             btn.disabled = true;
 
+            const useDefaults = document.getElementById('use-voice-defaults').checked;
+            const requestBody = {
+                voice_id: voiceId,
+                text: document.getElementById('use-voice-text').value,
+                language: document.getElementById('use-voice-language').value,
+                output_format: document.getElementById('use-voice-format').value,
+                model_size: document.getElementById('use-voice-model').value,
+                use_voice_defaults: useDefaults
+            };
+
+            // Si no se usan los valores por defecto, agregar los parámetros personalizados
+            if (!useDefaults) {
+                requestBody.temperature = parseFloat(document.getElementById('use-voice-temperature').value);
+                requestBody.top_p = parseFloat(document.getElementById('use-voice-top-p').value);
+                requestBody.top_k = parseInt(document.getElementById('use-voice-top-k').value);
+                requestBody.repetition_penalty = parseFloat(document.getElementById('use-voice-repetition-penalty').value);
+            }
+
             try {
                 const response = await fetch(`${API_URL}/tts/cloned-voice/generate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        voice_id: voiceId,
-                        text: document.getElementById('use-voice-text').value,
-                        language: document.getElementById('use-voice-language').value,
-                        output_format: document.getElementById('use-voice-format').value,
-                        model_size: document.getElementById('use-voice-model').value
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const data = await response.json();
