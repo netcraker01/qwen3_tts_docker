@@ -44,14 +44,8 @@ copy_model_files "Qwen3-TTS-12Hz-1.7B-CustomVoice" "0c0e3051f131929182e2c023b953
 # Corregir VoiceDesign model  
 copy_model_files "Qwen3-TTS-12Hz-1.7B-VoiceDesign" "5ecdb67327fd37bb2e042aab12ff7391903235d3"
 
-# Buscar y corregir Base model si existe
-BASE_DIR="/app/models/models--Qwen--Qwen3-TTS-12Hz-1.7B-Base/snapshots"
-if [ -d "$BASE_DIR" ]; then
-    BASE_SNAPSHOT=$(ls "$BASE_DIR" | head -1)
-    if [ -n "$BASE_SNAPSHOT" ]; then
-        copy_model_files "Qwen3-TTS-12Hz-1.7B-Base" "$BASE_SNAPSHOT"
-    fi
-fi
+# Corregir Base model
+copy_model_files "Qwen3-TTS-12Hz-1.7B-Base" "fd4b254389122332181a7c3db7f27e918eec64e3"
 
 echo ""
 echo "Corrección completada. Los modelos deberían funcionar correctamente ahora."

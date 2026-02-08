@@ -562,6 +562,16 @@ cp "$SRC/preprocessor_config.json" "$DST/"
 cp "$SRC/configuration.json" "$DST/"
 cp -L "$SRC/model.safetensors" "$DST/"
 '
+
+# Para Base (Voice Clone)
+docker exec qwen3-tts bash -c '
+SRC="/app/models/models--Qwen--Qwen3-TTS-12Hz-1.7B-Base/snapshots/fd4b254389122332181a7c3db7f27e918eec64e3/speech_tokenizer"
+DST="/app/models/hub/models--Qwen--Qwen3-TTS-12Hz-1.7B-Base/snapshots/fd4b254389122332181a7c3db7f27e918eec64e3/speech_tokenizer"
+mkdir -p "$DST"
+cp "$SRC/preprocessor_config.json" "$DST/"
+cp "$SRC/configuration.json" "$DST/"
+cp -L "$SRC/model.safetensors" "$DST/"
+'
 ```
 
 ### Error: `Connection refused` al llamar a la API
