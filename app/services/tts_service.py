@@ -584,7 +584,8 @@ class TTSService:
         speaker: str,
         language: str = "Auto",
         instruction: Optional[str] = None,
-        model_size: Optional[str] = None
+        model_size: Optional[str] = None,
+        generation_params: Optional[Dict] = None
     ) -> AudioResult:
         """
         Genera voz usando un personaje preestablecido.
@@ -595,6 +596,7 @@ class TTSService:
             language: Idioma del texto
             instruction: Instrucción opcional para modificar estilo/emoción
             model_size: Tamaño del modelo a usar
+            generation_params: Parámetros de generación (temperature, top_p, etc.)
         
         Returns:
             AudioResult con el audio generado
@@ -607,6 +609,12 @@ class TTSService:
         logger.info(f"Generando Custom Voice - Speaker: {speaker}, Lang: {language}")
         start_time = time.time()
         
+        # Preparar kwargs con parámetros de generación
+        kwargs = {}
+        if generation_params:
+            kwargs.update(generation_params)
+            logger.info(f"Usando parámetros de generación: {generation_params}")
+        
         try:
             # Usar no_grad para reducir uso de memoria
             with torch.no_grad():
@@ -614,7 +622,8 @@ class TTSService:
                     text=text,
                     language=language,
                     speaker=speaker,
-                    instruct=instruction
+                    instruct=instruction,
+                    **kwargs
                 )
             
             audio_data = wavs[0]
@@ -650,7 +659,8 @@ class TTSService:
         text: str,
         voice_description: str,
         language: str = "Spanish",
-        model_size: Optional[str] = None
+        model_size: Optional[str] = None,
+        generation_params: Optional[Dict] = None
     ) -> AudioResult:
         """
         Genera voz mediante descripción de texto.
@@ -660,6 +670,7 @@ class TTSService:
             voice_description: Descripción detallada de la voz deseada
             language: Idioma del texto
             model_size: Tamaño del modelo a usar
+            generation_params: Parámetros de generación (temperature, top_p, etc.)
         
         Returns:
             AudioResult con el audio generado
@@ -673,12 +684,19 @@ class TTSService:
         logger.debug(f"Voice description: {voice_description[:100]}...")
         start_time = time.time()
         
+        # Preparar kwargs con parámetros de generación
+        kwargs = {}
+        if generation_params:
+            kwargs.update(generation_params)
+            logger.info(f"Usando parámetros de generación: {generation_params}")
+        
         try:
             with torch.no_grad():
                 wavs, sr = model.generate_voice_design(
                     text=text,
                     language=language,
-                    instruct=voice_description
+                    instruct=voice_description,
+                    **kwargs
                 )
             
             audio_data = wavs[0]
@@ -770,7 +788,8 @@ class TTSService:
         text: str,
         voice_clone_prompt_id: str,
         language: str = "Spanish",
-        model_size: Optional[str] = None
+        model_size: Optional[str] = None,
+        generation_params: Optional[Dict] = None
     ) -> AudioResult:
         """
         Genera voz clonada usando un prompt previamente creado.
@@ -780,6 +799,7 @@ class TTSService:
             voice_clone_prompt_id: ID del prompt de clonación
             language: Idioma del texto
             model_size: Tamaño del modelo a usar
+            generation_params: Parámetros de generación (temperature, top_p, etc.)
         
         Returns:
             AudioResult con el audio generado
@@ -795,12 +815,19 @@ class TTSService:
         logger.info(f"Generando Voice Clone - Lang: {language}")
         start_time = time.time()
         
+        # Preparar kwargs con parámetros de generación
+        kwargs = {}
+        if generation_params:
+            kwargs.update(generation_params)
+            logger.info(f"Usando parámetros de generación: {generation_params}")
+        
         try:
             with torch.no_grad():
                 wavs, sr = model.generate_voice_clone(
                     text=text,
                     language=language,
-                    voice_clone_prompt=prompt
+                    voice_clone_prompt=prompt,
+                    **kwargs
                 )
             
             audio_data = wavs[0]

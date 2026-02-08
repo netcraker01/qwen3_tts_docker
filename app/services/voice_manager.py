@@ -25,6 +25,7 @@ class ClonedVoice:
     last_used: str
     use_count: int = 0
     prompt_data: Any = None  # El objeto prompt de Qwen3TTS (opcional, no se serializa)
+    generation_params: Optional[Dict] = None  # Parámetros de generación por defecto
     
     def to_dict(self) -> Dict:
         """Convierte a diccionario (el prompt_data no se serializa)."""
@@ -37,7 +38,8 @@ class ClonedVoice:
             "language": self.language,
             "created_at": self.created_at,
             "last_used": self.last_used,
-            "use_count": self.use_count
+            "use_count": self.use_count,
+            "generation_params": self.generation_params
         }
 
 
@@ -98,7 +100,8 @@ class VoiceManager:
         ref_audio_path: str,
         ref_text: str,
         language: str,
-        prompt_data: Any
+        prompt_data: Any,
+        generation_params: Optional[Dict] = None
     ) -> ClonedVoice:
         """
         Crea una nueva voz clonada y la guarda.
@@ -110,6 +113,7 @@ class VoiceManager:
             ref_text: Texto del audio de referencia
             language: Idioma principal
             prompt_data: El objeto prompt generado por Qwen3TTS
+            generation_params: Parámetros de generación por defecto
         
         Returns:
             La voz clonada creada
@@ -127,6 +131,7 @@ class VoiceManager:
             ref_text=ref_text,
             language=language,
             prompt_data=prompt_data,
+            generation_params=generation_params,
             created_at=now,
             last_used=now,
             use_count=0
@@ -191,7 +196,8 @@ class VoiceManager:
         self,
         voice_id: str,
         name: Optional[str] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        generation_params: Optional[Dict] = None
     ) -> Optional[ClonedVoice]:
         """
         Actualiza la información de una voz clonada.
@@ -200,6 +206,7 @@ class VoiceManager:
             voice_id: ID de la voz
             name: Nuevo nombre (opcional)
             description: Nueva descripción (opcional)
+            generation_params: Nuevos parámetros de generación (opcional)
         
         Returns:
             La voz actualizada o None si no existe
@@ -212,6 +219,8 @@ class VoiceManager:
             voice.name = name
         if description:
             voice.description = description
+        if generation_params is not None:
+            voice.generation_params = generation_params
         
         self._save_voices()
         logger.info(f"Voz actualizada: {voice_id}")
