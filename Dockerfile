@@ -508,6 +508,9 @@ RUN python3.10 -m pip install --no-cache-dir \
 # Copy application code
 COPY app/ ./app/
 
+# Copy web interface
+COPY web/ ./web/
+
 # Copy entrypoint script
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh

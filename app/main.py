@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 
 # Configuración de logging
 logging.basicConfig(
@@ -76,6 +77,11 @@ app.add_middleware(
 # Importar y registrar rutas
 from app.api.routes import router as api_router
 app.include_router(api_router, prefix="/api/v1")
+
+# Configurar archivos estáticos para la interfaz web
+if os.path.exists("/app/web"):
+    app.mount("/web", StaticFiles(directory="/app/web", html=True), name="web")
+    logger.info("Interfaz web servida en /web")
 
 
 @app.get("/")
