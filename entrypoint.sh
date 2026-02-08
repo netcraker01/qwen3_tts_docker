@@ -10,7 +10,7 @@ copy_model_files() {
     local model_name=$1
     local snapshot_id=$2
     
-    local SRC="/app/models/models--Qwen--${model_name}/snapshots/${snapshot_id}/speech_tokenizer"
+    local SRC="/app/models/hub/models--Qwen--${model_name}/snapshots/${snapshot_id}/speech_tokenizer"
     local DST="/app/models/hub/models--Qwen--${model_name}/snapshots/${snapshot_id}/speech_tokenizer"
     
     if [ -d "$SRC" ] && [ ! -f "$DST/preprocessor_config.json" ]; then

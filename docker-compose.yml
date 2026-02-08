@@ -17,7 +17,7 @@ services:
       - USE_FLASH_ATTENTION=true
       - MAX_AUDIO_LENGTH_SECONDS=30
     volumes:
-      - ./models:/app/models
+      - ./models/hub:/app/models/hub
       - ./output:/app/output
       - ./data:/app/data
     deploy:
