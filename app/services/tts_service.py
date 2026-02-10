@@ -400,9 +400,9 @@ class TTSService:
         default_model_size: str = "1.7B",
         use_flash_attention: bool = True
     ):
-        # Usar HF_HOME si está definido, o caché estándar de HuggingFace
+        # Usar HF_HOME si está definido, o /app/models (ruta de los modelos pre-descargados)
         if cache_dir is None:
-            cache_dir = os.getenv("HF_HOME", "/root/.cache/huggingface/hub")
+            cache_dir = os.getenv("HF_HOME", "/app/models")
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.default_model_size = default_model_size
@@ -442,6 +442,83 @@ class TTSService:
         logger.info(f"Cache dir: {self.cache_dir}")
         logger.info(f"Batch size: {self._batch_size}")
     
+    def _fix_speech_tokenizer_for_model(self, model_id: str) -> bool:
+        """
+        Verifica y corrige los archivos del speech_tokenizer para un modelo específico.
+        Retorna True si la corrección fue exitosa o no era necesaria.
+        """
+        try:
+            import shutil
+            from huggingface_hub import hf_hub_download
+            from pathlib import Path
+            
+            model_name = model_id.split("/")[-1]
+            
+            # Buscar el directorio del modelo en el caché
+            cache_path = Path(self.cache_dir)
+            model_dirs = list(cache_path.glob(f"models--Qwen--{model_name}/snapshots/*"))
+            
+            if not model_dirs:
+                logger.info(f"Modelo {model_name} no descargado aún, no se requiere corrección")
+                return True
+            
+            snapshot_dir = model_dirs[0]
+            tokenizer_dir = snapshot_dir / "speech_tokenizer"
+            
+            # Archivos necesarios
+            required_files = ["preprocessor_config.json", "configuration.json", "model.safetensors"]
+            missing_files = []
+            
+            for filename in required_files:
+                filepath = tokenizer_dir / filename
+                if not filepath.exists():
+                    missing_files.append(filename)
+            
+            if not missing_files:
+                logger.info(f"✓ speech_tokenizer completo para {model_name}")
+                return True
+            
+            logger.warning(f"Faltan archivos en speech_tokenizer para {model_name}: {missing_files}")
+            logger.info(f"Descargando archivos faltantes...")
+            
+            # Crear directorio si no existe
+            tokenizer_dir.mkdir(parents=True, exist_ok=True)
+            
+            all_ok = True
+            for filename in missing_files:
+                try:
+                    logger.info(f"  Descargando speech_tokenizer/{filename}...")
+                    downloaded_path = hf_hub_download(
+                        repo_id=model_id,
+                        filename=f"speech_tokenizer/{filename}",
+                        cache_dir=self.cache_dir,
+                        local_dir_use_symlinks=False,
+                        force_download=True
+                    )
+                    
+                    downloaded_path = Path(downloaded_path)
+                    dest_path = tokenizer_dir / filename
+                    
+                    # Si el archivo descargado es el mismo que el destino (symlink), ya está listo
+                    if downloaded_path.resolve() == dest_path.resolve():
+                        logger.info(f"  ✓ {filename} ya está en el lugar correcto")
+                    elif downloaded_path.exists():
+                        shutil.copy2(str(downloaded_path), str(dest_path))
+                        logger.info(f"  ✓ {filename} descargado y copiado")
+                    else:
+                        logger.error(f"  ✗ No se pudo descargar {filename}")
+                        all_ok = False
+                        
+                except Exception as e:
+                    logger.error(f"  ✗ Error descargando {filename}: {e}")
+                    all_ok = False
+            
+            return all_ok
+            
+        except Exception as e:
+            logger.error(f"Error corrigiendo speech_tokenizer: {e}")
+            return False
+
     def _get_model(self, model_type: str, model_size: Optional[str] = None, force_reload: bool = False) -> Any:
         """
         Obtiene un modelo, cargándolo si es necesario (lazy loading).
@@ -485,36 +562,56 @@ class TTSService:
             model_id = self.MODELS[size][model_type]
             logger.info(f"Cargando modelo: {model_id}")
             
-            try:
-                # Configuración optimizada para estabilidad (no velocidad)
-                load_kwargs = {
-                    "cache_dir": str(self.cache_dir),
-                    "device_map": "cuda:0" if self.device == "cuda" else "auto",
-                    "torch_dtype": self.dtype,
-                    "low_cpu_mem_usage": True,
-                }
-                
-                # NO usar flash_attention para evitar errores CUDA
-                # NO compilar modelo para evitar inestabilidad
-                
-                model = Qwen3TTSModel.from_pretrained(
-                    model_id,
-                    **load_kwargs
-                )
-                
-                # El modelo Qwen3TTSModel no requiere llamada a eval()
-                # ya que no es un nn.Module estándar de PyTorch
-                
-                self._models[cache_key] = model
-                logger.info(f"Modelo {model_id} cargado exitosamente")
-                logger.info(f"Memoria CUDA después de carga: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
-                
-            except Exception as e:
-                logger.error(f"Error cargando modelo {model_id}: {e}")
-                # Limpiar memoria en caso de error
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                raise RuntimeError(f"No se pudo cargar el modelo {model_id}: {e}")
+            # Intentar cargar con reintentos y corrección automática
+            max_retries = 3
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    # Configuración optimizada para estabilidad (no velocidad)
+                    load_kwargs = {
+                        "cache_dir": str(self.cache_dir),
+                        "device_map": "cuda:0" if self.device == "cuda" else "auto",
+                        "torch_dtype": self.dtype,
+                        "low_cpu_mem_usage": True,
+                    }
+                    
+                    model = Qwen3TTSModel.from_pretrained(
+                        model_id,
+                        **load_kwargs
+                    )
+                    
+                    self._models[cache_key] = model
+                    logger.info(f"Modelo {model_id} cargado exitosamente")
+                    logger.info(f"Memoria CUDA después de carga: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                    return self._models[cache_key]
+                    
+                except Exception as e:
+                    last_error = e
+                    error_msg = str(e)
+                    logger.error(f"Error cargando modelo {model_id} (intento {attempt + 1}/{max_retries}): {e}")
+                    
+                    # Si es error de speech_tokenizer, intentar corregir
+                    if "speech_tokenizer" in error_msg and "preprocessor_config" in error_msg:
+                        logger.info(f"Detectado error de speech_tokenizer. Intentando corrección...")
+                        if self._fix_speech_tokenizer_for_model(model_id):
+                            logger.info(f"Corrección aplicada. Reintentando carga...")
+                            continue
+                        else:
+                            logger.error(f"No se pudo corregir speech_tokenizer")
+                    
+                    # Si es el último intento, salir del loop y lanzar error
+                    if attempt == max_retries - 1:
+                        break
+                    
+                    # Esperar antes de reintentar
+                    import time
+                    time.sleep(1)
+            
+            # Si llegamos aquí, todos los intentos fallaron
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            raise RuntimeError(f"No se pudo cargar el modelo {model_id} después de {max_retries} intentos: {last_error}")
         
         return self._models[cache_key]
     
@@ -804,13 +901,44 @@ class TTSService:
         Returns:
             AudioResult con el audio generado
         """
+        size = model_size or self.default_model_size
+        
         # Usar force_reload=True para liberar memoria si es necesario
-        model = self._get_model("voice_clone", model_size, force_reload=True)
+        model = self._get_model("voice_clone", size, force_reload=True)
         
         if voice_clone_prompt_id not in self._voice_clone_prompts:
-            raise ValueError(f"Voice clone prompt no encontrado: {voice_clone_prompt_id}")
+            raise ValueError(f"Voice clone prompt no encontrado: {voice_clone_prompt_id}. "
+                           f"Debes crear el prompt primero usando create_voice_clone_prompt.")
         
         prompt = self._voice_clone_prompts[voice_clone_prompt_id]
+        
+        # Validar compatibilidad del prompt con el modelo
+        # Los prompts creados con 1.7B no funcionan con 0.6B y viceversa
+        prompt_cache_key = f"{voice_clone_prompt_id}_{size}"
+        if hasattr(prompt, 'shape') or hasattr(prompt, '__len__'):
+            # Intentar detectar incompatibilidad por dimensiones
+            try:
+                if torch.is_tensor(prompt):
+                    # Si es un tensor, verificar dimensiones típicas
+                    if prompt.dim() >= 2:
+                        last_dim = prompt.shape[-1]
+                        if size == "0.6B" and last_dim == 2048:
+                            raise ValueError(
+                                f"El prompt fue creado con el modelo 1.7B (dimensión {last_dim}) "
+                                f"pero estás usando el modelo 0.6B. "
+                                f"Debes recrear el prompt con el modelo 0.6B usando create_voice_clone_prompt."
+                            )
+                        elif size == "1.7B" and last_dim == 1024:
+                            raise ValueError(
+                                f"El prompt fue creado con el modelo 0.6B (dimensión {last_dim}) "
+                                f"pero estás usando el modelo 1.7B. "
+                                f"Debes recrear el prompt con el modelo 1.7B usando create_voice_clone_prompt."
+                            )
+            except Exception as e:
+                if "Debes recrear el prompt" in str(e):
+                    raise
+                # Si hay otro error, continuar y dejar que falle más adelante si es necesario
+                pass
         
         logger.info(f"Generando Voice Clone - Lang: {language}")
         start_time = time.time()

@@ -28,6 +28,7 @@ from app.schemas.requests import (
 )
 
 from app.services.voice_manager import VoiceManager
+from app.services.model_manager import get_model_manager
 
 # Usar dependencias globales
 from app.dependencies import get_tts_service
@@ -38,6 +39,103 @@ router = APIRouter()
 # Directorio para archivos de salida
 OUTPUT_DIR = "/app/output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# ModelManager para gestión de descargas
+model_manager = get_model_manager()
+
+
+# ============================================================
+# ENDPOINTS - ESTADO Y PROGRESO DE MODELOS
+# ============================================================
+
+@router.get(
+    "/models/status",
+    summary="Estado de todos los modelos",
+    description="Obtiene el estado de instalación de todos los modelos disponibles.",
+    tags=["Models"]
+)
+async def get_models_status():
+    """
+    Retorna el estado de todos los modelos.
+    """
+    return {
+        "models": model_manager.get_all_models_status(),
+        "cache_dir": str(model_manager.cache_dir)
+    }
+
+
+@router.get(
+    "/models/status/{model_size}/{model_type}",
+    summary="Estado de un modelo específico",
+    description="Obtiene el estado de un modelo específico (ej: 1.7B/voice_clone).",
+    tags=["Models"]
+)
+async def get_model_status(model_size: str, model_type: str):
+    """
+    Retorna el estado de un modelo específico.
+    """
+    if model_size not in ["1.7B", "0.6B"]:
+        raise HTTPException(status_code=400, detail="model_size debe ser '1.7B' o '0.6B'")
+    
+    if model_type not in ["voice_clone", "custom_voice", "voice_design"]:
+        raise HTTPException(status_code=400, detail="model_type inválido")
+    
+    return model_manager.get_model_status(model_size, model_type)
+
+
+@router.post(
+    "/models/download/{model_size}/{model_type}",
+    summary="Descargar un modelo",
+    description="Inicia la descarga de un modelo específico si no está instalado.",
+    tags=["Models"]
+)
+async def download_model(model_size: str, model_type: str):
+    """
+    Inicia la descarga de un modelo.
+    """
+    if model_size not in ["1.7B", "0.6B"]:
+        raise HTTPException(status_code=400, detail="model_size debe ser '1.7B' o '0.6B'")
+    
+    if model_type not in ["voice_clone", "custom_voice", "voice_design"]:
+        raise HTTPException(status_code=400, detail="model_type inválido")
+    
+    # Iniciar descarga en background
+    def progress_callback(progress):
+        logger.info(f"Descarga {progress.model_id}: {progress.progress_percent}% - {progress.current_file}")
+    
+    success = model_manager.ensure_model_downloaded(model_size, model_type, progress_callback)
+    
+    if success:
+        return {
+            "success": True,
+            "message": f"Modelo {model_size}/{model_type} descargado correctamente"
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Error descargando el modelo")
+
+
+@router.get(
+    "/health",
+    summary="Health check",
+    description="Verifica que el servicio está funcionando y retorna información básica.",
+    tags=["System"]
+)
+async def health_check():
+    """
+    Health check del servicio.
+    """
+    import torch
+    
+    # Verificar si los modelos esenciales están disponibles
+    voice_clone_status = model_manager.get_model_status("1.7B", "voice_clone")
+    
+    return {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "cuda_available": torch.cuda.is_available(),
+        "models_ready": voice_clone_status["installed"],
+        "cache_dir": str(model_manager.cache_dir)
+    }
 
 
 # ============================================================

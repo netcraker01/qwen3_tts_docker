@@ -1,9 +1,11 @@
-
 services:
   qwen3-tts:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Puedes cambiar a 0.6B para descargar modelos más pequeños
+        - DOWNLOAD_MODEL_SIZE=1.7B
     image: qwen3-tts-service:latest
     container_name: qwen3-tts-api
     ports:
@@ -14,10 +16,11 @@ services:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=info
       - DEFAULT_MODEL_SIZE=1.7B
-      - USE_FLASH_ATTENTION=true
+      - USE_FLASH_ATTENTION=false
       - MAX_AUDIO_LENGTH_SECONDS=30
     volumes:
-      - ./models/hub:/app/models/hub
+      # Solo montar directorios de datos y output, NO los modelos
+      # Los modelos ya están incluidos en la imagen Docker
       - ./output:/app/output
       - ./data:/app/data
     deploy:
@@ -28,16 +31,16 @@ services:
               count: 1
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "python3.10", "-c", "import requests; requests.get('http://localhost:8000/api/v1/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 30s
-      timeout: 30s
+      timeout: 10s
       retries: 3
       start_period: 60s
     restart: unless-stopped
     networks:
       - tts-network
 
-  # Web UI Interface
+  # Web UI Interface (opcional)
   tts-webui:
     image: nginx:alpine
     container_name: qwen3-tts-webui
@@ -54,7 +57,3 @@ services:
 networks:
   tts-network:
     driver: bridge
-
-volumes:
-  models:
-  output:

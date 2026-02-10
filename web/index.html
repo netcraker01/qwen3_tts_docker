@@ -373,12 +373,73 @@
             margin-bottom: 15px;
         }
 
+        /* Footer de estado fijo */
+        .footer-status {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--surface);
+            border-top: 2px solid var(--primary);
+            padding: 12px 20px;
+            z-index: 100;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .footer-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            min-width: 200px;
+        }
+
+        .footer-progress {
+            flex: 1;
+            min-width: 150px;
+            height: 8px;
+            background: var(--background);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .footer-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .footer-percent {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--primary);
+            min-width: 45px;
+        }
+
         @media (max-width: 768px) {
             .form-row { grid-template-columns: 1fr; }
             .tabs { justify-content: flex-start; overflow-x: auto; }
             header h1 { font-size: 1.6rem; }
             .voice-card { flex-direction: column; align-items: flex-start; gap: 10px; }
             .voice-actions { width: 100%; justify-content: flex-end; }
+            .footer-content { flex-direction: column; gap: 10px; }
+            .footer-progress { width: 100%; }
+            .container { padding-bottom: 100px; }
+        }
+
+        /* Ajuste para el footer fijo */
+        body {
+            padding-bottom: 70px;
         }
     </style>
 </head>
@@ -401,6 +462,10 @@
             <div class="status-item">
                 <span>💾</span>
                 <span id="vram-info">--</span>
+            </div>
+            <div class="status-item" style="cursor: pointer;" onclick="showModelStatusModal()">
+                <span>📦</span>
+                <span id="models-status">Ver Modelos</span>
             </div>
         </div>
 
@@ -795,6 +860,48 @@
                 </button>
             </div>
         </div>
+
+        <!-- Modal para estado de modelos -->
+        <div id="models-modal" class="modal-overlay">
+            <div class="modal-content" style="max-width: 700px;">
+                <div class="modal-header">
+                    <h3>📦 Estado de Modelos</h3>
+                    <button class="close-btn" onclick="closeModelsModal()">&times;</button>
+                </div>
+                <div id="models-list">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <p>Cargando estado de modelos...</p>
+                    </div>
+                </div>
+                <div id="model-download-progress" class="progress-container" style="margin-top: 15px;">
+                    <div class="progress-text">
+                        <span id="model-download-status">Descargando...</span>
+                        <span id="model-download-percent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="model-download-fill" class="progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer fijo con estado de modelos -->
+        <div id="footer-status" class="footer-status" style="display: none;">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <span id="footer-icon">📦</span>
+                    <span id="footer-text">Verificando modelos...</span>
+                </div>
+                <div class="footer-progress">
+                    <div id="footer-progress-bar" class="footer-progress-bar" style="width: 0%"></div>
+                </div>
+                <div class="footer-percent">
+                    <span id="footer-percent">0%</span>
+                </div>
+                <button class="btn btn-small" onclick="showModelStatusModal()" style="margin-left: 10px;">Ver Detalles</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -804,6 +911,9 @@
         document.addEventListener('DOMContentLoaded', () => {
             checkServerStatus();
             setInterval(checkServerStatus, 30000);
+            
+            // Iniciar actualizaciones del footer de estado
+            startFooterUpdates();
             
             // Cargar voces cuando se abre el panel
             document.querySelector('.tab[onclick="showPanel(\'use-cloned\')"]').addEventListener('click', loadVoicesForSelect);
@@ -1329,6 +1439,189 @@
 
         document.getElementById('edit-modal').addEventListener('click', (e) => {
             if (e.target === e.currentTarget) closeEditModal();
+        });
+
+        // ==================== FOOTER DE ESTADO ====================
+        let footerStatusInterval = null;
+
+        async function updateFooterStatus() {
+            try {
+                const response = await fetch(`${API_URL}/models/status`);
+                const data = await response.json();
+                
+                const footer = document.getElementById('footer-status');
+                const footerIcon = document.getElementById('footer-icon');
+                const footerText = document.getElementById('footer-text');
+                const footerBar = document.getElementById('footer-progress-bar');
+                const footerPercent = document.getElementById('footer-percent');
+                
+                // Verificar si hay alguna descarga en progreso
+                const downloading = data.models.find(m => m.progress && m.progress.status === 'downloading');
+                const pending = data.models.filter(m => !m.installed);
+                
+                if (downloading) {
+                    // Mostrar progreso de descarga
+                    footer.style.display = 'block';
+                    footerIcon.textContent = '⬇️';
+                    footerText.textContent = `Descargando ${downloading.repo_id.split('/').pop()}...`;
+                    const percent = downloading.progress.progress_percent || 0;
+                    footerBar.style.width = `${percent}%`;
+                    footerPercent.textContent = `${percent.toFixed(0)}%`;
+                } else if (pending.length > 0) {
+                    // Hay modelos pendientes pero no descargando
+                    footer.style.display = 'block';
+                    footerIcon.textContent = '⚠️';
+                    footerText.textContent = `${pending.length} modelo(s) pendiente(s) de descarga`;
+                    footerBar.style.width = '0%';
+                    footerPercent.textContent = '';
+                } else {
+                    // Todo instalado
+                    footer.style.display = 'none';
+                }
+            } catch (error) {
+                // Silenciar errores en el footer
+            }
+        }
+
+        // Iniciar actualización del footer
+        function startFooterUpdates() {
+            updateFooterStatus();
+            if (footerStatusInterval) clearInterval(footerStatusInterval);
+            footerStatusInterval = setInterval(updateFooterStatus, 3000);
+        }
+
+        // ==================== ESTADO DE MODELOS ====================
+        let modelStatusInterval = null;
+        let currentDownloadingModel = null;
+
+        async function showModelStatusModal() {
+            document.getElementById('models-modal').classList.add('show');
+            await loadModelsStatus();
+            
+            // Actualizar cada 2 segundos si hay descargas en progreso
+            if (modelStatusInterval) clearInterval(modelStatusInterval);
+            modelStatusInterval = setInterval(loadModelsStatus, 2000);
+        }
+
+        function closeModelsModal() {
+            document.getElementById('models-modal').classList.remove('show');
+            if (modelStatusInterval) {
+                clearInterval(modelStatusInterval);
+                modelStatusInterval = null;
+            }
+        }
+
+        async function loadModelsStatus() {
+            try {
+                const response = await fetch(`${API_URL}/models/status`);
+                const data = await response.json();
+                
+                const container = document.getElementById('models-list');
+                const progressDiv = document.getElementById('model-download-progress');
+                
+                if (!data.models || data.models.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>No hay información de modelos</p></div>';
+                    return;
+                }
+
+                // Agrupar por tamaño
+                const models1_7B = data.models.filter(m => m.model_size === '1.7B');
+                const models0_6B = data.models.filter(m => m.model_size === '0.6B');
+                
+                let html = '<div style="margin-bottom: 20px;">';
+                html += '<h4 style="margin-bottom: 10px; color: var(--primary);">📦 Modelos 1.7B (Mejor calidad)</h4>';
+                html += renderModelGroup(models1_7B);
+                html += '</div>';
+                
+                html += '<div>';
+                html += '<h4 style="margin-bottom: 10px; color: var(--secondary);">📦 Modelos 0.6B (Más rápido)</h4>';
+                html += renderModelGroup(models0_6B);
+                html += '</div>';
+                
+                container.innerHTML = html;
+                
+                // Verificar si hay alguna descarga en progreso
+                const downloading = data.models.find(m => m.progress && m.progress.status === 'downloading');
+                if (downloading) {
+                    progressDiv.classList.add('show');
+                    document.getElementById('model-download-status').textContent = 
+                        `Descargando ${downloading.repo_id}...`;
+                    document.getElementById('model-download-percent').textContent = 
+                        `${downloading.progress.progress_percent?.toFixed(0) || 0}%`;
+                    document.getElementById('model-download-fill').style.width = 
+                        `${downloading.progress.progress_percent || 0}%`;
+                } else {
+                    progressDiv.classList.remove('show');
+                }
+                
+            } catch (error) {
+                document.getElementById('models-list').innerHTML = 
+                    '<div class="empty-state"><p>Error cargando estado</p></div>';
+            }
+        }
+
+        function renderModelGroup(models) {
+            if (models.length === 0) return '<p style="color: var(--text-muted);">No hay modelos</p>';
+            
+            return models.map(m => {
+                const isInstalled = m.installed;
+                const statusIcon = isInstalled ? '✅' : '⬜';
+                const statusText = isInstalled ? 'Instalado' : 'No instalado';
+                const typeLabel = {
+                    'voice_clone': 'Clonación',
+                    'custom_voice': 'Voz Predefinida',
+                    'voice_design': 'Diseño de Voz'
+                }[m.model_type] || m.model_type;
+                
+                return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; 
+                                padding: 10px; background: var(--background); border-radius: var(--border-radius); 
+                                margin-bottom: 8px;">
+                        <div>
+                            <div style="font-weight: 500;">${typeLabel}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">${m.repo_id}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div>${statusIcon} ${statusText}</div>
+                            ${!isInstalled ? `
+                                <button class="btn btn-small" style="margin-top: 5px;" 
+                                        onclick="downloadModel('${m.model_size}', '${m.model_type}')">
+                                    ⬇️ Descargar
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function downloadModel(modelSize, modelType) {
+            if (!confirm(`¿Descargar el modelo ${modelSize}/${modelType}?\n\nEsto puede tardar varios minutos.`)) {
+                return;
+            }
+            
+            try {
+                showAlert('⬇️ Iniciando descarga del modelo...', 'warning');
+                
+                const response = await fetch(`${API_URL}/models/download/${modelSize}/${modelType}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✅ Modelo descargado correctamente');
+                    loadModelsStatus();
+                } else {
+                    showAlert('❌ Error descargando modelo', 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error de conexión', 'error');
+            }
+        }
+
+        document.getElementById('models-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeModelsModal();
         });
     </script>
 </body>

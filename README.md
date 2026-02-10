@@ -7,8 +7,6 @@
 
 > Servicio Docker de Texto a Voz (TTS) basado en **Qwen3-TTS** de Alibaba Cloud con API REST.
 
-**Repositorio**: https://github.com/netcraker01/qwen3_tts_docker
-
 Servicio Docker de Texto a Voz (TTS) basado en **Qwen3-TTS** con soporte para:
 - 🎭 **Custom Voice**: Voces preestablecidas (Vivian, Ryan, Sohee, etc.)
 - 🎨 **Voice Design**: Crear voces por descripción de texto
@@ -20,14 +18,14 @@ Servicio Docker de Texto a Voz (TTS) basado en **Qwen3-TTS** con soporte para:
 - **API REST**: FastAPI con documentación OpenAPI/Swagger automática
 - **Soporte GPU**: Optimizado para CUDA
 - **Multi-idioma**: Español, Inglés, Chino, Japonés, Coreano, Alemán, Francés, Ruso, Portugués, Italiano
-- **Lazy Loading**: Carga modelos bajo demanda para optimizar memoria
+- **Self-contained**: Modelos pre-descargados en la imagen Docker
 
 ## 📋 Requisitos
 
 - Docker y Docker Compose
 - NVIDIA Docker Runtime (para soporte GPU)
 - GPU con al menos 8GB VRAM (recomendado 12GB)
-- ~15GB espacio en disco para modelos y contenedor
+- ~15GB espacio en disco para la imagen Docker (incluye modelos)
 
 ## 🛠️ Instalación y Uso
 
@@ -51,53 +49,28 @@ Antes de comenzar, asegúrate de tener instalado:
    docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
    ```
 
-3. **Git**
-   - [Descargar Git](https://git-scm.com/downloads)
-
 ---
 
-### Paso 1: Clonar el Repositorio
+### Paso 1: Clonar y Construir
 
 ```bash
-# Clonar desde GitHub
+# Clonar el repositorio
 git clone https://github.com/netcraker01/qwen3_tts_docker.git
-
-# Entrar al directorio
 cd qwen3_tts_docker
 
-# Verificar archivos
-ls -la
+# Construir la imagen (descarga modelos durante el build)
+# ⚠️ Esto puede tardar 10-20 minutos la primera vez
+docker-compose build
+
+# O si prefieres usar modelos 0.6B (más ligeros, 3GB menos):
+# Edita docker-compose.yml y cambia DOWNLOAD_MODEL_SIZE a 0.6B
 ```
+
+> **Nota importante**: Los modelos se descargan **durante el build** de Docker, no en runtime. Esto hace que el contenedor sea completamente autónomo.
 
 ---
 
-### Paso 2: Preparar el Entorno
-
-```bash
-# Crear directorios necesarios (si no existen)
-mkdir -p models output data
-
-# Verificar estructura
-tree -L 2
-# o
-ls -R
-```
-
-**Estructura esperada:**
-```
-qwen3_tts_docker/
-├── app/              # Código fuente
-├── models/           # Cache de modelos (volumen)
-├── output/           # Archivos generados (volumen)
-├── data/             # Voces clonadas persistentes (volumen)
-├── docker-compose.yml
-├── Dockerfile
-└── README.md
-```
-
----
-
-### Paso 3: Iniciar el Servicio
+### Paso 2: Iniciar el Servicio
 
 ```bash
 # Iniciar en modo detached (background)
@@ -108,16 +81,11 @@ docker-compose ps
 
 # Ver logs en tiempo real
 docker-compose logs -f qwen3-tts
-
-# Ver logs recientes (últimas 100 líneas)
-docker-compose logs --tail=100 qwen3-tts
 ```
-
-**Primera ejecución:** El servicio intentará descargar los modelos automáticamente. Esto puede tardar varios minutos dependiendo de tu conexión.
 
 ---
 
-### Paso 4: Verificar la Instalación
+### Paso 3: Verificar la Instalación
 
 ```bash
 # Test de health check
@@ -143,11 +111,14 @@ curl http://localhost:8080/api/v1/speakers
 
 ---
 
-### Paso 5: Acceder a la Documentación
+### Paso 4: Acceder a la Documentación
 
 - **API Docs (Swagger UI)**: http://localhost:8080/docs
 - **API Docs (ReDoc)**: http://localhost:8080/redoc
 - **Health Check**: http://localhost:8080/api/v1/health
+- **Web UI**: http://localhost:8081 (si habilitaste tts-webui)
+
+---
 
 ## 📡 Endpoints API
 
@@ -190,22 +161,8 @@ curl -X POST "http://localhost:8080/api/v1/tts/custom" \
 - ✅ Formato nativo de WhatsApp (Opus en contenedor OGG)
 - ✅ Archivos pequeños (~20-30KB para mensajes de 2-3 segundos)
 - ✅ Máxima compatibilidad con todos los clientes de WhatsApp
-- ✅ Calidad óptima para voz a 24kHz mono
 
 **Formatos soportados:** `wav`, `mp3`, `ogg`, `opus`
-
-**Respuesta exitosa:**
-```json
-{
-  "success": true,
-  "audio_base64": "UklGRiT+AQBXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YQD+AQAAAAEAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAA/////wAA/////wAAAAD/////AQABAP///v/+/wAAAQABAAEAAAAAAAAA///+////AAAAAP////8AAAEAA...",
-  "sample_rate": 24000,
-  "duration_seconds": 2.72,
-  "model_used": "1.7B_custom_voice",
-  "processing_time_seconds": 17.69,
-  "error": null
-}
-```
 
 ### Voice Design
 
@@ -233,129 +190,7 @@ curl -X POST "http://localhost:8080/api/v1/tts/clone/url" \
   }'
 ```
 
-### Voice Clone (Upload)
-
-```bash
-curl -X POST "http://localhost:8080/api/v1/tts/clone/upload" \
-  -F "text=Esta es mi voz clonada" \
-  -F "ref_text=Hola, esta es mi voz" \
-  -F "language=Spanish" \
-  -F "ref_audio=@/ruta/a/mi-voz.wav"
-```
-
-## 🎵 Formatos de Audio
-
-La API soporta múltiples formatos de salida configurables mediante el parámetro `output_format`.
-
-### Formatos Disponibles
-
-| Formato | Extensión | Tamaño | Uso Recomendado |
-|---------|-----------|--------|-----------------|
-| **OGG** | `.ogg` | ~20-30KB | **WhatsApp** - Formato nativo (Opus) |
-| **OPUS** | `.opus` | ~20-30KB | **WhatsApp** - Codec Opus explícito |
-| **MP3** | `.mp3` | ~40-60KB | Compatibilidad universal |
-| **WAV** | `.wav` | ~200-400KB | Máxima calidad, sin compresión |
-
-### 📱 Guía para WhatsApp
-
-Para enviar mensajes de voz por WhatsApp, se recomienda usar **OGG** o **OPUS**:
-
-**Características:**
-- ✅ Formato nativo de WhatsApp (contenedor OGG con codec Opus)
-- ✅ Archivos pequeños (~20-30KB para mensajes de 2-3 segundos)
-- ✅ Máxima compatibilidad con todos los clientes de WhatsApp
-- ✅ Calidad óptima para voz a 24kHz mono
-
-**Ejemplo para WhatsApp:**
-```bash
-curl -X POST "http://localhost:8080/api/v1/tts/custom" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Hola, este es un mensaje de WhatsApp",
-    "speaker": "Ryan",
-    "language": "Spanish",
-    "output_format": "ogg"
-  }'
-```
-
-**Decodificar Base64 a archivo:**
-```bash
-# Linux/Mac
-curl -X POST "http://localhost:8080/api/v1/tts/custom" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Hola WhatsApp","speaker":"Ryan","language":"Spanish","output_format":"ogg"}' | \
-  jq -r '.audio_base64' | base64 -d > mensaje.ogg
-
-# Windows (PowerShell)
-$response = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/tts/custom" -Method Post -ContentType "application/json" -Body '{"text":"Hola WhatsApp","speaker":"Ryan","language":"Spanish","output_format":"ogg"}'
-[System.Convert]::FromBase64String($response.audio_base64) | Set-Content -Path "mensaje.ogg" -Encoding Byte
-```
-
-## 🗣️ Gestión de Voces Clonadas Persistentes
-
-El sistema permite crear, almacenar y reusar voces clonadas para generación rápida de audio.
-
-### Endpoints de Gestión
-
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/v1/cloned-voices` | POST | Crear nueva voz clonada persistente |
-| `/api/v1/cloned-voices` | GET | Listar todas las voces clonadas |
-| `/api/v1/cloned-voices/{id}` | GET | Obtener información de una voz |
-| `/api/v1/cloned-voices/{id}` | PUT | Actualizar nombre/descripción |
-| `/api/v1/cloned-voices/{id}` | DELETE | Eliminar voz clonada |
-| `/api/v1/cloned-voices/stats` | GET | Estadísticas de uso |
-| `/api/v1/tts/cloned-voice/generate` | POST | Generar audio usando voz guardada |
-
-### Ejemplo: Crear y Usar Voz Clonada
-
-**1. Crear voz clonada:**
-```bash
-curl -X POST "http://localhost:8080/api/v1/cloned-voices" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Mi Voz Personal",
-    "description": "Voz clonada de mi audio de referencia",
-    "ref_audio_url": "https://ejemplo.com/mi-voz.wav",
-    "ref_text": "Hola, esta es mi voz de referencia para clonación",
-    "language": "Spanish"
-  }'
-```
-
-**Respuesta:**
-```json
-{
-  "success": true,
-  "voice": {
-    "id": "mi_voz_personal_1704567890",
-    "name": "Mi Voz Personal",
-    "description": "Voz clonada de mi audio de referencia",
-    "ref_text": "Hola, esta es mi voz de referencia...",
-    "language": "Spanish",
-    "created_at": "2024-01-06 15:30:45",
-    "last_used": "2024-01-06 15:30:45",
-    "use_count": 0
-  },
-  "message": "Voz 'Mi Voz Personal' creada exitosamente. Use el ID 'mi_voz_personal_1704567890' para generar audio."
-}
-```
-
-**2. Generar audio usando la voz guardada:**
-```bash
-curl -X POST "http://localhost:8080/api/v1/tts/cloned-voice/generate" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Este es un mensaje usando mi voz clonada guardada",
-    "voice_id": "mi_voz_personal_1704567890",
-    "output_format": "ogg"
-  }'
-```
-
-**Ventajas de usar voces persistentes:**
-- ⚡ **Mucho más rápido**: No requiere reprocesar el audio de referencia
-- 💾 **Persistente**: Las voces sobreviven reinicios del servidor
-- 📊 **Estadísticas**: Seguimiento de uso de cada voz
-- 🔧 **Editable**: Puedes renombrar y modificar descripciones
+---
 
 ## 🎭 Speakers Disponibles
 
@@ -371,133 +206,67 @@ curl -X POST "http://localhost:8080/api/v1/tts/cloned-voice/generate" \
 | Ono_Anna | Female | Japanese | Anime |
 | Sohee | Female | Korean | Natural |
 
-## 🌍 Idiomas Soportados
-
-- Auto (detección automática)
-- Spanish
-- English
-- Chinese
-- Japanese
-- Korean
-- German
-- French
-- Russian
-- Portuguese
-- Italian
+---
 
 ## ⚙️ Configuración
 
-Variables de entorno en `docker-compose.yml`:
+### Variables de Entorno
+
+Edita `docker-compose.yml` para personalizar:
 
 | Variable | Descripción | Default |
 |----------|-------------|---------|
 | `CUDA_VISIBLE_DEVICES` | GPU a usar | 0 |
-| `HF_HOME` | Directorio caché de modelos HuggingFace | /app/models |
 | `DEFAULT_MODEL_SIZE` | Tamaño modelo (1.7B o 0.6B) | 1.7B |
-| `USE_FLASH_ATTENTION` | Usar Flash Attention | true |
+| `USE_FLASH_ATTENTION` | Usar Flash Attention | false |
 | `LOG_LEVEL` | Nivel de logs | info |
 
-## 📁 Estructura del Proyecto
+### Cambiar tamaño de modelo (1.7B vs 0.6B)
 
-```
-qwen3-tts-service/
-├── app/
-│   ├── api/
-│   │   ├── routes.py          # Endpoints REST
-│   │   └── __init__.py
-│   ├── schemas/
-│   │   ├── requests.py        # Modelos Pydantic
-│   │   └── __init__.py
-│   ├── services/
-│   │   ├── tts_service.py     # Lógica TTS
-│   │   └── __init__.py
-│   ├── dependencies.py        # Inyección de dependencias
-│   └── main.py                # Entry point FastAPI
-├── models/                    # Caché de modelos (volumen)
-├── output/                    # Archivos generados (volumen)
-├── data/                      # Voces clonadas persistentes (volumen)
-├── Dockerfile                 # Imagen Docker
-├── docker-compose.yml         # Orquestación
-├── download_models.py         # Script descarga manual
-├── requirements.txt           # Dependencias
-├── test_api.py                # Script de pruebas
-├── .dockerignore
-├── .gitignore
-├── LICENSE
-└── README.md                  # Este archivo
+Para usar modelos más ligeros (0.6B):
+
+```yaml
+# En docker-compose.yml
+services:
+  qwen3-tts:
+    build:
+      args:
+        - DOWNLOAD_MODEL_SIZE=0.6B  # Cambiar aquí
+    environment:
+      - DEFAULT_MODEL_SIZE=0.6B    # Y aquí
 ```
 
-## 🔧 Desarrollo
-
-### Sin Docker (desarrollo local)
-
+Luego reconstruye:
 ```bash
-# Crear entorno virtual
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# o
-venv\Scripts\activate     # Windows
-
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Ejecutar
-python -m uvicorn app.main:app --reload --port 8000
-```
-
-### Testing
-
-```bash
-# Health check
-curl http://localhost:8080/api/v1/health
-
-# Listar speakers
-curl http://localhost:8080/api/v1/speakers
-
-# Generar audio
-curl -X POST "http://localhost:8080/api/v1/tts/custom" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Hello world","speaker":"Ryan","language":"English"}'
-```
-
-## 🛑 Detener y Actualizar el Servicio
-
-### Detener el servicio
-```bash
-# Detener contenedores (conserva datos)
-docker-compose down
-
-# Detener y eliminar volúmenes (⚠️ borra modelos descargados)
-docker-compose down -v
-
-# Detener y eliminar imágenes también
-docker-compose down --rmi all
-```
-
-### Actualizar el servicio
-```bash
-# Obtener últimos cambios del repositorio
-git pull origin main
-
-# Reconstruir imagen con cambios
-docker-compose up -d --build
-
-# O forzar reconstrucción completa
 docker-compose down
 docker-compose build --no-cache
 docker-compose up -d
 ```
 
-### Verificar estado
+---
+
+## 🛑 Comandos Útiles
+
 ```bash
-# Ver contenedores corriendo
-docker ps
+# Ver logs
+docker-compose logs -f qwen3-tts
+
+# Reiniciar servicio
+docker-compose restart qwen3-tts
+
+# Detener servicio (conserva datos)
+docker-compose down
+
+# Detener y eliminar todo (⚠️ incluye voces clonadas)
+docker-compose down -v
+
+# Reconstruir imagen completa
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
 
 # Ver uso de recursos
 docker stats qwen3-tts
-
-# Ver logs con filtro
-docker-compose logs -f qwen3-tts | grep ERROR
 ```
 
 ---
@@ -507,112 +276,40 @@ docker-compose logs -f qwen3-tts | grep ERROR
 ### Error: `docker: Error response from daemon: could not select device driver`
 **Solución:** NVIDIA Docker Runtime no está instalado.
 ```bash
-# Linux: Instalar nvidia-container-toolkit
 sudo apt-get install nvidia-container-toolkit
 sudo systemctl restart docker
 ```
 
 ### Error: `RuntimeError: CUDA out of memory`
-**Solución:** La GPU no tiene suficiente VRAM.
-```bash
-# Usar modelo más pequeño
-echo "DEFAULT_MODEL_SIZE=0.6B" >> .env
-docker-compose restart
-```
-
-### Error: `No se pudo cargar el modelo` o descarga atascada
-**Solución:** Descargar modelos manualmente.
-```bash
-# Ejecutar script de descarga manual dentro del contenedor
-docker-compose exec qwen3-tts python3.10 /app/download_models.py
-
-# O copiar el script y ejecutar
-docker cp download_models.py qwen3-tts:/tmp/
-docker-compose exec qwen3-tts python3.10 /tmp/download_models.py
-```
+**Solución:** Usar modelo más pequeño (0.6B) como se describe arriba.
 
 ### Error: `Can't load feature extractor for ... speech_tokenizer`
-**Causa:** Los archivos del modelo se descargaron incompletos. Esto es un problema conocido con la biblioteca `qwen-tts`.
+**Solución:** El script `fix_models_on_startup.py` se ejecuta automáticamente al iniciar el contenedor para corregir esto.
 
-**Solución rápida:** Ejecutar el script de corrección dentro del contenedor:
-```bash
-# Copiar y ejecutar el script de fix
-docker cp fix_model_files.sh qwen3-tts:/tmp/
-docker-compose exec qwen3-tts bash /tmp/fix_model_files.sh
-```
-
-**Solución manual:** Copiar los archivos faltantes:
-```bash
-# Para CustomVoice
-docker exec qwen3-tts bash -c '
-SRC="/app/models/models--Qwen--Qwen3-TTS-12Hz-1.7B-CustomVoice/snapshots/0c0e3051f131929182e2c023b9537f8b1c68adfe/speech_tokenizer"
-DST="/app/models/hub/models--Qwen--Qwen3-TTS-12Hz-1.7B-CustomVoice/snapshots/0c0e3051f131929182e2c023b9537f8b1c68adfe/speech_tokenizer"
-mkdir -p "$DST"
-cp "$SRC/preprocessor_config.json" "$DST/"
-cp "$SRC/configuration.json" "$DST/"
-cp -L "$SRC/model.safetensors" "$DST/"
-'
-
-# Para VoiceDesign
-docker exec qwen3-tts bash -c '
-SRC="/app/models/models--Qwen--Qwen3-TTS-12Hz-1.7B-VoiceDesign/snapshots/5ecdb67327fd37bb2e042aab12ff7391903235d3/speech_tokenizer"
-DST="/app/models/hub/models--Qwen--Qwen3-TTS-12Hz-1.7B-VoiceDesign/snapshots/5ecdb67327fd37bb2e042aab12ff7391903235d3/speech_tokenizer"
-mkdir -p "$DST"
-cp "$SRC/preprocessor_config.json" "$DST/"
-cp "$SRC/configuration.json" "$DST/"
-cp -L "$SRC/model.safetensors" "$DST/"
-'
-
-# Para Base (Voice Clone)
-docker exec qwen3-tts bash -c '
-SRC="/app/models/models--Qwen--Qwen3-TTS-12Hz-1.7B-Base/snapshots/fd4b254389122332181a7c3db7f27e918eec64e3/speech_tokenizer"
-DST="/app/models/hub/models--Qwen--Qwen3-TTS-12Hz-1.7B-Base/snapshots/fd4b254389122332181a7c3db7f27e918eec64e3/speech_tokenizer"
-mkdir -p "$DST"
-cp "$SRC/preprocessor_config.json" "$DST/"
-cp "$SRC/configuration.json" "$DST/"
-cp -L "$SRC/model.safetensors" "$DST/"
-'
-```
-
-### Error: `Connection refused` al llamar a la API
-**Solución:** El servicio aún está iniciando o hay un error.
-```bash
-# Verificar estado
-docker-compose ps
-
-# Ver logs
-docker-compose logs qwen3-tts
-
-# Esperar a que esté listo
-docker-compose logs -f qwen3-tts | grep "Application startup complete"
-```
-
-### Error: `Disk quota exceeded` durante build
-**Solución:** Limpiar espacio de Docker.
-```bash
-docker system prune -af
-docker volume prune -f
-```
+### El build falla al descargar modelos
+**Solución:** Si el build falla por problemas de red, el contenedor intentará descargar los modelos en runtime. Sin embargo, esto hará que la primera ejecución sea más lenta.
 
 ---
 
-## 📊 Comandos Útiles
+## 📁 Estructura del Proyecto
 
-```bash
-# Ver espacio usado por Docker
-docker system df
-
-# Limpiar caché de Docker
-docker system prune -a
-
-# Ejecutar comando dentro del contenedor
-docker-compose exec qwen3-tts bash
-
-# Ver archivos generados
-ls -lah output/
-
-# Copiar archivo desde contenedor
-docker cp qwen3-tts:/app/output/audio.wav ./audio.wav
+```
+qwen3_tts_docker/
+├── app/                      # Código fuente de la API
+│   ├── api/routes.py        # Endpoints REST
+│   ├── services/            # Lógica de negocio
+│   │   ├── tts_service.py   # Servicio TTS principal
+│   │   ├── model_manager.py # Gestión de modelos
+│   │   └── voice_manager.py # Gestión de voces clonadas
+│   ├── schemas/requests.py  # Modelos Pydantic
+│   └── main.py              # Entry point FastAPI
+├── web/                      # Interfaz web (opcional)
+├── Dockerfile               # Imagen Docker (modelos pre-descargados)
+├── docker-compose.yml       # Orquestación
+├── entrypoint.sh            # Script de inicio
+├── fix_models_on_startup.py # Verificación de modelos
+├── download_models_docker.py # Script de descarga para build
+└── requirements.txt         # Dependencias Python
 ```
 
 ---
@@ -630,10 +327,6 @@ docker cp qwen3-tts:/app/output/audio.wav ./audio.wav
 Este proyecto utiliza Qwen3-TTS de Alibaba Cloud. Ver licencias originales:
 - [Qwen3-TTS](https://huggingface.co/Qwen)
 
-## 🤝 Contribuciones
-
-Issues y PRs son bienvenidos!
-
 ---
 
-**Nota**: La primera ejecución descargará los modelos (~4-6GB), lo cual puede tardar varios minutos dependiendo de la conexión.
+**Nota**: La imagen Docker incluye los modelos pre-descargados (~4-6GB), lo que permite un despliegue inmediato sin esperas de descarga.
