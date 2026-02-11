@@ -5,12 +5,13 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> Servicio Docker de Texto a Voz (TTS) basado en **Qwen3-TTS** de Alibaba Cloud con API REST.
+> Servicio Docker de Texto a Voz (TTS) basado en **Qwen3-TTS** de Alibaba Cloud con API REST y cola FIFO para procesamiento asíncrono.
 
 Servicio Docker de Texto a Voz (TTS) basado en **Qwen3-TTS** con soporte para:
 - 🎭 **Custom Voice**: Voces preestablecidas (Vivian, Ryan, Sohee, etc.)
 - 🎨 **Voice Design**: Crear voces por descripción de texto
 - 🎤 **Voice Clone**: Clonación Zero-Shot desde audio de referencia
+- 📋 **Jobs Asíncronos con Cola FIFO**: Procesamiento ordenado sin timeouts
 
 ## 🚀 Características
 
@@ -141,7 +142,80 @@ curl http://localhost:8080/api/v1/speakers
 | `/api/v1/tts/clone/upload` | POST | Clonar subiendo archivo |
 | `/api/v1/tts/custom/file` | POST | Generar y descargar archivo |
 
+### Jobs Asíncronos (Cola FIFO) ⭐ NUEVO
+
+Para operaciones largas que pueden causar timeout, usa los endpoints de jobs asíncronos:
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/jobs` | POST | Crear job de generación de audio |
+| `/api/v1/jobs/queue/status` | GET | Estado de la cola de procesamiento |
+| `/api/v1/jobs/{id}/stream` | GET | SSE - Progreso en tiempo real |
+| `/api/v1/jobs/{id}/status` | GET | Consultar estado del job |
+| `/api/v1/jobs/{id}/result` | GET | Obtener resultado |
+| `/api/v1/jobs/{id}/cancel` | POST | Cancelar job |
+
+**Características:**
+- ✅ **Cola FIFO**: Jobs procesados en orden de llegada
+- ✅ **Sin timeouts**: Respuesta inmediata con job_id
+- ✅ **Múltiples peticionarios**: Varios clientes pueden enviar jobs simultáneamente
+- ✅ **Progreso en tiempo real**: Streaming SSE con actualizaciones de progreso
+- ✅ **Monitoreo**: Endpoint para ver estado de la cola
+
+**Tipos de job soportados:**
+- `custom_voice` - Voz preestablecida
+- `voice_design` - Diseño de voz por descripción
+- `voice_clone_url` - Clonación desde URL
+- `voice_clone_file` - Clonación desde archivo base64
+- `cloned_voice_generate` - Generar usando voz clonada guardada
+
+**Ejemplo de uso con jobs:**
+```bash
+# 1. Crear job
+curl -X POST "http://localhost:8080/api/v1/jobs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_type": "custom_voice",
+    "request_data": {
+      "text": "Texto largo a convertir...",
+      "speaker": "Sohee",
+      "output_format": "wav"
+    }
+  }'
+# Respuesta: {"job_id": "xxx", "stream_url": "/api/v1/jobs/xxx/stream", ...}
+
+# 2. Monitorear progreso (en navegador o con sseclient)
+# GET /api/v1/jobs/{job_id}/stream
+
+# 3. Obtener resultado
+curl "http://localhost:8080/api/v1/jobs/{job_id}/result"
+```
+
+**Ver estado de la cola:**
+```bash
+curl "http://localhost:8080/api/v1/jobs/queue/status"
+```
+Respuesta:
+```json
+{
+  "queue": {
+    "pending": 3,
+    "processing": 1,
+    "max_concurrent": 1
+  },
+  "jobs": {
+    "total": 15,
+    "completed": 12,
+    "failed": 0
+  },
+  "system_status": "busy"
+}
+```
+
+Más detalles en [API.md](API.md#jobs-asíncronos-con-cola-fifo).
+
 ## 💡 Ejemplos de Uso
+
 
 ### Custom Voice
 
