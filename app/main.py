@@ -76,7 +76,10 @@ app.add_middleware(
 
 # Importar y registrar rutas
 from app.api.routes import router as api_router
+from app.api.jobs_routes import router as jobs_router
+
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(jobs_router, prefix="/api/v1")
 
 # Configurar archivos estáticos para la interfaz web
 if os.path.exists("/app/web"):

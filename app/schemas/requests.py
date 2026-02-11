@@ -2,7 +2,7 @@
 Pydantic models for API requests and responses.
 """
 
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Dict, Any
 from pydantic import BaseModel, Field, validator
 
 # ============================================================
@@ -436,3 +436,68 @@ class GenerateFromClonedVoiceRequest(GenerationParams):
         if v not in MODEL_SIZES:
             raise ValueError(f"Tamaño de modelo '{v}' no válido. Opciones: {MODEL_SIZES}")
         return v
+
+
+# ============================================================
+# SCHEMAS - JOBS ASÍNCRONOS
+# ============================================================
+
+class CreateJobRequest(BaseModel):
+    """Request para crear un job de generación de audio asíncrono."""
+    job_type: str = Field(
+        ...,
+        description="Tipo de job: custom_voice, voice_design, voice_clone_url, voice_clone_file, cloned_voice_generate",
+        example="custom_voice"
+    )
+    request_data: Dict[str, Any] = Field(
+        ...,
+        description="Datos específicos del request según el tipo de job"
+    )
+    
+    @validator('job_type')
+    def validate_job_type(cls, v):
+        valid_types = ["custom_voice", "voice_design", "voice_clone_url", "voice_clone_file", "cloned_voice_generate"]
+        if v not in valid_types:
+            raise ValueError(f"Tipo de job '{v}' no válido. Opciones: {valid_types}")
+        return v
+
+
+class JobProgressInfo(BaseModel):
+    """Información de progreso de un job."""
+    stage: str = Field(description="Etapa actual del procesamiento")
+    percent: int = Field(description="Porcentaje de progreso (0-100)")
+    message: str = Field(description="Mensaje descriptivo")
+    timestamp: float = Field(description="Timestamp de la última actualización")
+
+
+class JobInfo(BaseModel):
+    """Información de un job."""
+    id: str = Field(description="ID único del job")
+    type: str = Field(description="Tipo de job")
+    status: str = Field(description="Estado: pending, processing, completed, failed, cancelled")
+    created_at: float = Field(description="Timestamp de creación")
+    updated_at: float = Field(description="Timestamp de última actualización")
+    progress: JobProgressInfo = Field(description="Progreso actual")
+    result: Optional[Dict] = Field(default=None, description="Resultado si está completado")
+    error: Optional[str] = Field(default=None, description="Mensaje de error si falló")
+    elapsed_seconds: float = Field(description="Tiempo transcurrido en segundos")
+
+
+class CreateJobResponse(BaseModel):
+    """Response al crear un job."""
+    success: bool = Field(description="Si el job fue creado exitosamente")
+    job_id: str = Field(description="ID del job creado")
+    job: JobInfo = Field(description="Información completa del job")
+    stream_url: str = Field(description="URL para conectarse al stream SSE de progreso")
+    status_url: str = Field(description="URL para consultar el estado del job")
+
+
+class JobListResponse(BaseModel):
+    """Response con lista de jobs."""
+    jobs: List[JobInfo] = Field(description="Lista de jobs")
+    total: int = Field(description="Total de jobs")
+
+
+class JobStatusResponse(BaseModel):
+    """Response con estado de un job."""
+    job: JobInfo = Field(description="Información del job")

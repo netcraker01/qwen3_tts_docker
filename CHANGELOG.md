@@ -8,12 +8,33 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 ## [Unreleased]
 
 ### Added
+- **Sistema de Jobs Asíncronos con Cola FIFO** - Nueva API para procesamiento de audio sin bloqueo
+  - Cola FIFO (First In, First Out) para procesamiento ordenado de jobs
+  - Múltiples peticionarios pueden enviar jobs simultáneamente
+  - Procesamiento secuencial por defecto (1 job a la vez), configurable
+  - Workers asíncronos que procesan jobs de la cola en orden
+  - Endpoint `/jobs/queue/status` para monitorear estado de la cola
+  - Streaming de progreso en tiempo real vía Server-Sent Events (SSE)
+  - Soporte para custom_voice, voice_design, voice_clone_url, voice_clone_file, cloned_voice_generate
+  - Heartbeats automáticos para mantener conexiones vivas durante procesos largos
+  - Posibilidad de cancelar jobs en proceso
+  - Limpieza automática de jobs antiguos
+- Script `test_async_jobs.py` con ejemplos de uso de la API asíncrona
 - Soporte para modelos 0.6B (menor uso de memoria)
 - Nuevo endpoint `/tts/clone/upload` para subir archivos directamente
 - Sistema de voces clonadas persistentes
 - Soporte para data URLs base64 en cloned voices
 - Script `run_local.sh` para ejecución sin Docker
 - Archivo `.env` para configuración local
+
+### New Endpoints
+- `POST /api/v1/jobs` - Crear job de generación de audio asíncrono
+- `GET /api/v1/jobs/{job_id}/stream` - Stream SSE de progreso en tiempo real
+- `GET /api/v1/jobs/{job_id}/status` - Consultar estado del job
+- `GET /api/v1/jobs/{job_id}/result` - Obtener resultado del job
+- `GET /api/v1/jobs` - Listar todos los jobs
+- `POST /api/v1/jobs/{job_id}/cancel` - Cancelar un job
+- `DELETE /api/v1/jobs/{job_id}` - Eliminar un job
 
 ### Fixed
 - Corregido error de carga de modelos `speech_tokenizer`

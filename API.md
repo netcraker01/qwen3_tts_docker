@@ -408,6 +408,225 @@ Obtiene estadísticas de uso.
 
 ---
 
+## Jobs Asíncronos con Cola FIFO
+
+Para operaciones largas que pueden causar timeout (textos largos, voice clone con archivos grandes), la API proporciona endpoints de jobs asíncronos con **cola FIFO** (First In, First Out).
+
+### Características:
+- **Cola FIFO**: Los jobs se procesan en orden de llegada
+- **Múltiples peticionarios**: Varios clientes pueden enviar jobs simultáneamente
+- **Procesamiento controlado**: Por defecto 1 job a la vez (configurable)
+- **No hay timeouts**: El cliente recibe inmediatamente un job_id y puede monitorear el progreso
+- **Streaming en tiempo real**: Progreso vía Server-Sent Events (SSE)
+
+### Flujo de trabajo:
+1. Cliente crea un job → Recibe job_id inmediatamente
+2. Job se encola en la cola FIFO
+3. Worker procesa jobs uno a uno (o según configuración de concurrencia)
+4. Cliente monitorea progreso vía SSE
+5. Cliente obtiene resultado cuando el job termina
+
+### Crear un Job
+
+#### POST `/jobs`
+Crea un nuevo job de generación de audio asíncrono.
+
+**Request Body:**
+```json
+{
+  "job_type": "custom_voice",
+  "request_data": {
+    "text": "Texto largo a convertir...",
+    "speaker": "Sohee",
+    "language": "Spanish",
+    "output_format": "wav"
+  }
+}
+```
+
+**Tipos de job soportados:**
+| Tipo | Descripción |
+|------|-------------|
+| `custom_voice` | Voz preestablecida |
+| `voice_design` | Diseño de voz por descripción |
+| `voice_clone_url` | Clonación desde URL |
+| `voice_clone_file` | Clonación desde archivo base64 |
+| `cloned_voice_generate` | Generar usando voz clonada guardada |
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "job": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "custom_voice",
+    "status": "pending",
+    "created_at": 1704567890.123,
+    "updated_at": 1704567890.123,
+    "progress": {
+      "stage": "created",
+      "percent": 0,
+      "message": "Job creado",
+      "timestamp": 1704567890.123
+    },
+    "elapsed_seconds": 0.0
+  },
+  "stream_url": "/api/v1/jobs/550e8400-e29b-41d4-a716-446655440000/stream",
+  "status_url": "/api/v1/jobs/550e8400-e29b-41d4-a716-446655440000/status"
+}
+```
+
+---
+
+### Stream de Progreso (SSE)
+
+#### GET `/jobs/{job_id}/stream`
+Conecta a un stream Server-Sent Events para recibir actualizaciones de progreso en tiempo real.
+
+**Content-Type:** `text/event-stream`
+
+**Eventos:**
+| Evento | Descripción |
+|--------|-------------|
+| `progress` | Actualización de progreso (stage, percent, message) |
+| `heartbeat` | Ping cada segundo para mantener conexión |
+| `completed` | Job completado exitosamente |
+| `error` | Error durante el procesamiento |
+| `cancelled` | Job cancelado |
+
+**Ejemplo de eventos:**
+```
+event: progress
+data: {"stage": "loading_model", "percent": 15, "message": "Cargando modelo...", "timestamp": 1704567891.234}
+
+event: progress
+data: {"stage": "generating", "percent": 50, "message": "Generando audio...", "timestamp": 1704567895.678}
+
+event: completed
+data: {"status": "completed", "result": {"success": true, "audio_base64": "...", ...}}
+```
+
+**Ejemplo JavaScript:**
+```javascript
+const eventSource = new EventSource('/api/v1/jobs/{job_id}/stream');
+
+eventSource.addEventListener('progress', (e) => {
+  const data = JSON.parse(e.data);
+  console.log(`${data.percent}% - ${data.message}`);
+});
+
+eventSource.addEventListener('completed', (e) => {
+  const data = JSON.parse(e.data);
+  console.log('Audio generado:', data.result);
+  eventSource.close();
+});
+
+eventSource.addEventListener('error', (e) => {
+  console.error('Error:', e.data);
+  eventSource.close();
+});
+```
+
+---
+
+### Consultar Estado del Job
+
+#### GET `/jobs/{job_id}/status`
+Obtiene el estado actual de un job.
+
+**Respuesta:**
+```json
+{
+  "job": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "custom_voice",
+    "status": "processing",
+    "progress": {
+      "stage": "generating",
+      "percent": 65,
+      "message": "Generando audio...",
+      "timestamp": 1704567895.678
+    },
+    "elapsed_seconds": 15.5
+  }
+}
+```
+
+---
+
+### Listar Jobs
+
+#### GET `/jobs`
+Lista todos los jobs, opcionalmente filtrados por estado.
+
+**Query Parameters:**
+| Parámetro | Descripción |
+|-----------|-------------|
+| `status` | Filtrar por: pending, processing, completed, failed, cancelled |
+
+**Respuesta:**
+```json
+{
+  "jobs": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "custom_voice",
+      "status": "completed",
+      "elapsed_seconds": 25.3
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### Obtener Resultado
+
+#### GET `/jobs/{job_id}/result`
+Obtiene el resultado de un job completado.
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "result": {
+    "success": true,
+    "audio_base64": "UklGRiT+AQBXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YQD+AQAAAAEAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAA...",
+    "sample_rate": 24000,
+    "duration_seconds": 5.23,
+    "model_used": "1.7B_custom_voice",
+    "processing_time_seconds": 18.45
+  }
+}
+```
+
+---
+
+### Cancelar Job
+
+#### POST `/jobs/{job_id}/cancel`
+Cancela un job que está pendiente o en proceso.
+
+**Respuesta:**
+```json
+{
+  "success": true,
+  "message": "Job 550e8400-e29b-41d4-a716-446655440000 cancelado exitosamente"
+}
+```
+
+---
+
+### Eliminar Job
+
+#### DELETE `/jobs/{job_id}`
+Elimina permanentemente un job.
+
+---
+
 ## Ejemplos de Uso
 
 ### Python
