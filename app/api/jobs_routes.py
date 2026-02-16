@@ -109,7 +109,8 @@ async def get_queue_status():
     """
     Obtiene el estado de la cola de procesamiento FIFO.
     """
-    pending = job_manager._queue.qsize()
+    # Manejar caso cuando la cola no está inicializada
+    pending = job_manager._queue.qsize() if job_manager._queue is not None else 0
     processing = job_manager._processing_count
     max_concurrent = job_manager._max_concurrent
     
@@ -166,7 +167,8 @@ async def get_job_status(job_id: str):
     - heartbeat: Ping cada segundo para mantener la conexión viva
     - completed: Job completado exitosamente (incluye resultado)
     - error: Error durante el procesamiento
-    - cancelled: Job cancelado
+    - cancelled: Job cancelado suavemente
+    - killed: Job matado forzosamente
     
     Ejemplo de uso con JavaScript:
     ```javascript
@@ -249,13 +251,20 @@ async def list_jobs(status: Optional[str] = None):
 
 @router.post(
     "/jobs/{job_id}/cancel",
-    summary="Cancelar un job",
-    description="Cancela un job que está pendiente o en proceso.",
+    summary="Cancelar un job (suave)",
+    description="""
+    Cancela un job que está pendiente o en proceso.
+    
+    Para jobs en ejecución, esto marca el job para cancelación pero no lo detiene inmediatamente.
+    El job se detendrá en el próximo punto de verificación de cancelación.
+    
+    Para una cancelación forzosa inmediata, use el endpoint /kill.
+    """,
     tags=["Async Jobs"]
 )
 async def cancel_job(job_id: str):
     """
-    Cancela un job.
+    Cancela un job de forma suave.
     """
     success = job_manager.cancel_job(job_id)
     
@@ -269,10 +278,54 @@ async def cancel_job(job_id: str):
                 detail=f"No se puede cancelar el job. Estado actual: {job.status.value}"
             )
     
+    job = job_manager.get_job(job_id)
     return {
         "success": True,
-        "message": f"Job {job_id} cancelado exitosamente"
+        "message": f"Job {job_id} marcado para cancelación",
+        "job_status": job.status.value if job else "unknown"
     }
+
+
+@router.post(
+    "/jobs/{job_id}/kill",
+    summary="Matar un job (forzoso)",
+    description="""
+    Mata un job de forma forzosa, deteniéndolo inmediatamente.
+    
+    Este endpoint intenta:
+    1. Cancelar la tarea asyncio del job si está en ejecución
+    2. Marcar el job como 'killed'
+    
+    Funciona para jobs en cualquier estado:
+    - **PENDING**: Se marca como killed y se elimina de la cola
+    - **PROCESSING**: Se intenta cancelar la tarea y se marca como killed
+    - **CANCELLED**: Se actualiza a killed
+    
+    Nota: Los jobs que están procesando audio en el modelo de ML pueden tardar
+    unos segundos en detenerse completamente debido a la naturaleza del procesamiento.
+    """,
+    tags=["Async Jobs"]
+)
+async def kill_job(job_id: str, timeout: float = 5.0):
+    """
+    Mata un job de forma forzosa.
+    
+    Args:
+        job_id: ID del job a matar
+        timeout: Tiempo máximo de espera para cancelación graceful (default: 5s)
+    """
+    result = await job_manager.kill_job(job_id, timeout=timeout)
+    
+    if not result.get("success", False):
+        error_msg = result.get("error", "Error desconocido")
+        job_status = result.get("job_status")
+        
+        if "no encontrado" in error_msg.lower():
+            raise HTTPException(status_code=404, detail=error_msg)
+        else:
+            raise HTTPException(status_code=400, detail=error_msg)
+    
+    return result
 
 
 @router.delete(

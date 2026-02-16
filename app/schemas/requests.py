@@ -474,7 +474,7 @@ class JobInfo(BaseModel):
     """Información de un job."""
     id: str = Field(description="ID único del job")
     type: str = Field(description="Tipo de job")
-    status: str = Field(description="Estado: pending, processing, completed, failed, cancelled")
+    status: str = Field(description="Estado: pending, processing, completed, failed, cancelled, killed")
     created_at: float = Field(description="Timestamp de creación")
     updated_at: float = Field(description="Timestamp de última actualización")
     progress: JobProgressInfo = Field(description="Progreso actual")

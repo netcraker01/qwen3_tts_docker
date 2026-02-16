@@ -602,21 +602,23 @@ async def create_cloned_voice(request: CreateClonedVoiceRequest):
         tts_service = get_tts_service()
         
         ref_audio_url = request.ref_audio_url
+        audio_bytes_to_save = None
+        temp_file_path = None
         
-        # Si es data URL base64, guardar temporalmente
+        # Si es data URL base64, guardar temporalmente y extraer bytes
         if ref_audio_url.startswith("data:audio") and ";base64," in ref_audio_url:
             logger.info("Detectado data URL base64, procesando...")
             import base64
             import tempfile
-            import os
             
             # Extraer la parte base64
             base64_data = ref_audio_url.split(";base64,")[1]
-            audio_bytes = base64.b64decode(base64_data)
+            audio_bytes_to_save = base64.b64decode(base64_data)
             
-            # Guardar temporalmente
+            # Guardar temporalmente para crear el prompt
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                tmp.write(audio_bytes)
+                tmp.write(audio_bytes_to_save)
+                temp_file_path = tmp.name
                 ref_audio_url = tmp.name
                 logger.info(f"Audio base64 guardado temporalmente en: {ref_audio_url}")
         
@@ -632,23 +634,23 @@ async def create_cloned_voice(request: CreateClonedVoiceRequest):
         if not prompt_data:
             raise HTTPException(status_code=500, detail="No se pudo crear el prompt de voz")
         
-        # Guardar en el VoiceManager (usar una URL placeholder ya que el audio ya se procesó)
-        # Guardar los parámetros de generación por defecto
+        # Guardar en el VoiceManager con los bytes del audio para persistencia
         voice = voice_manager.create_voice(
             name=request.name,
             description=request.description,
-            ref_audio_path="internal://voice_prompt/" + prompt_id,  # URL interna
+            ref_audio_path=ref_audio_url,
             ref_text=request.ref_text,
             language=request.language,
             prompt_data=prompt_data,
-            generation_params=request.to_generation_kwargs()
+            generation_params=request.to_generation_kwargs(),
+            ref_audio_bytes=audio_bytes_to_save  # Pasar los bytes para que se guarden
         )
         
         # Limpiar archivo temporal si era data URL
-        if ref_audio_url.startswith("/tmp"):
+        if temp_file_path and temp_file_path.startswith("/tmp"):
             try:
-                os.remove(ref_audio_url)
-                logger.info(f"Archivo temporal eliminado: {ref_audio_url}")
+                os.remove(temp_file_path)
+                logger.info(f"Archivo temporal eliminado: {temp_file_path}")
             except:
                 pass
         
@@ -792,11 +794,49 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
         logger.info(f"Prompt data encontrado: {prompt_data is not None}")
         logger.info(f"Tipo de prompt_data: {type(prompt_data)}")
         
+        # Si no hay prompt en memoria (ej: después de reiniciar), recrearlo del audio de referencia
         if not prompt_data:
-            raise HTTPException(
-                status_code=500,
-                detail="Prompt de voz no disponible en memoria. Es posible que el servidor se haya reiniciado. Recree la voz."
-            )
+            logger.info("Prompt no encontrado en memoria. Recreando desde audio de referencia...")
+            
+            # Verificar que existe el audio de referencia
+            ref_audio_path = voice.ref_audio_path
+            logger.info(f"Ruta audio de referencia: {ref_audio_path}")
+            
+            if not os.path.exists(ref_audio_path):
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Audio de referencia no encontrado: {ref_audio_path}. "
+                           f"La voz necesita ser recreada."
+                )
+            
+            try:
+                # Recrear el prompt usando el audio de referencia guardado
+                temp_prompt_id = tts_service.create_voice_clone_prompt(
+                    ref_audio_path=ref_audio_path,
+                    ref_text=voice.ref_text,
+                    model_size=request.model_size or "1.7B"
+                )
+                
+                # Obtener el prompt recién creado
+                prompt_data = tts_service._voice_clone_prompts.get(temp_prompt_id)
+                
+                if prompt_data:
+                    # Guardar el prompt en el voice_manager para futuros usos
+                    voice_manager._prompts[request.voice_id] = prompt_data
+                    logger.info(f"Prompt recreado exitosamente y guardado en memoria")
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="No se pudo recrear el prompt de voz"
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Error recreando prompt: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error recreando el prompt de voz: {str(e)}. "
+                           f"Por favor, vuelva a crear la voz clonada."
+                )
         
         # Usar el idioma de la voz si no se especificó otro
         language = request.language or voice.language

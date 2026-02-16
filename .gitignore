@@ -180,3 +180,7 @@ $RECYCLE.BIN/
 .nfs*
 # Datos persistentes de voces clonadas
 data/*.json
+
+# Backups de volúmenes
+backups/
+*.tar.gz

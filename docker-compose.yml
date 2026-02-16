@@ -18,11 +18,21 @@ services:
       - DEFAULT_MODEL_SIZE=1.7B
       - USE_FLASH_ATTENTION=false
       - MAX_AUDIO_LENGTH_SECONDS=30
+      # Asegurar que los archivos creados tengan buenos permisos
+      - PYTHONDONTWRITEBYTECODE=1
     volumes:
-      # Solo montar directorios de datos y output, NO los modelos
-      # Los modelos ya están incluidos en la imagen Docker
-      - ./output:/app/output
-      - ./data:/app/data
+      # VOLUMENES PERSISTENTES - Las voces clonadas y datos se mantienen al reiniciar
+      # Volumen nombrado para datos (voces clonadas, configuraciones)
+      - qwen3_tts_data:/app/data
+      # Volumen nombrado para archivos de audio generados
+      - qwen3_tts_output:/app/output
+      # Código fuente en modo desarrollo (recarga en caliente)
+      - ./app:/app/app:ro
+      # NOTA: Los modelos están incluidos en la imagen Docker, no hace falta volumen
+      #
+      # PARA DESARROLLO (opcional): Descomenta las líneas siguientes para usar bind mounts
+      # - ./data:/app/data
+      # - ./output:/app/output
     deploy:
       resources:
         reservations:
@@ -57,3 +67,11 @@ services:
 networks:
   tts-network:
     driver: bridge
+
+# Volumenes persistentes para datos y output
+# Estos volúmenes sobreviven a reinicios y recreaciones del contenedor
+volumes:
+  qwen3_tts_data:
+    driver: local
+  qwen3_tts_output:
+    driver: local

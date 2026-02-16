@@ -416,7 +416,12 @@ class TTSService:
         # Configuración de device - optimizaciones para velocidad máxima
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         # Usar float16 para máxima velocidad en RTX 3060/3060Ti 12GB
-        self.dtype = torch.float16 if self.device == "cuda" else torch.float32
+        # Cuando se usa CPU offload, float16 sigue funcionando bien
+        self.dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        
+        # Configuración de memoria
+        self.cpu_offload_enabled = True  # Habilitar offload a CPU por defecto
+        self.vram_safety_margin = 1.0    # Margen de seguridad en GB
         
         # Optimizaciones de PyTorch para máximo rendimiento
         if self.device == "cuda":
@@ -519,9 +524,64 @@ class TTSService:
             logger.error(f"Error corrigiendo speech_tokenizer: {e}")
             return False
 
+    def _estimate_model_memory(self, model_size: str) -> float:
+        """
+        Estima la memoria VRAM necesaria para un modelo en GB.
+        
+        Args:
+            model_size: "1.7B" o "0.6B"
+            
+        Returns:
+            Memoria estimada en GB
+        """
+        # Estimaciones basadas en el tamaño del modelo en FP16
+        # 1.7B params ~ 3.4GB + overhead (~0.5GB) = ~4GB
+        # 0.6B params ~ 1.2GB + overhead (~0.3GB) = ~1.5GB
+        memory_estimates = {
+            "1.7B": 4.0,  # GB
+            "0.6B": 1.5   # GB
+        }
+        return memory_estimates.get(model_size, 4.0)
+    
+    def _get_available_vram(self) -> float:
+        """
+        Obtiene la VRAM disponible en GB.
+        
+        Returns:
+            VRAM disponible en GB
+        """
+        if not torch.cuda.is_available():
+            return 0.0
+        
+        # Obtener memoria libre en el dispositivo
+        free_memory = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
+        return free_memory / 1e9  # Convertir a GB
+    
+    def _should_use_cpu_offload(self, model_size: str, safety_margin: float = 1.0) -> bool:
+        """
+        Determina si se debe usar CPU offload basado en la VRAM disponible.
+        
+        Args:
+            model_size: "1.7B" o "0.6B"
+            safety_margin: Margen de seguridad adicional en GB
+            
+        Returns:
+            True si se debe usar CPU offload
+        """
+        if not torch.cuda.is_available():
+            return True
+        
+        available_vram = self._get_available_vram()
+        required_memory = self._estimate_model_memory(model_size) + safety_margin
+        
+        logger.info(f"VRAM disponible: {available_vram:.2f} GB, Requerida: {required_memory:.2f} GB")
+        
+        return available_vram < required_memory
+    
     def _get_model(self, model_type: str, model_size: Optional[str] = None, force_reload: bool = False) -> Any:
         """
         Obtiene un modelo, cargándolo si es necesario (lazy loading).
+        Soporta offload a CPU/RAM automático cuando no hay suficiente VRAM.
         
         Args:
             model_type: Tipo de modelo ('custom_voice', 'voice_design', 'voice_clone')
@@ -562,34 +622,94 @@ class TTSService:
             model_id = self.MODELS[size][model_type]
             logger.info(f"Cargando modelo: {model_id}")
             
+            # Determinar si necesitamos CPU offload
+            use_cpu_offload = self._should_use_cpu_offload(size)
+            
+            if use_cpu_offload and torch.cuda.is_available():
+                logger.warning(f"VRAM insuficiente para modelo {size}. Usando CPU/RAM offload.")
+                logger.warning(f"Esto será más lento pero permitirá usar el modelo.")
+            
             # Intentar cargar con reintentos y corrección automática
             max_retries = 3
             last_error = None
             
             for attempt in range(max_retries):
                 try:
-                    # Configuración optimizada para estabilidad (no velocidad)
+                    # Configuración de carga del modelo
                     load_kwargs = {
                         "cache_dir": str(self.cache_dir),
-                        "device_map": "cuda:0" if self.device == "cuda" else "auto",
-                        "torch_dtype": self.dtype,
+                        "dtype": self.dtype,  # Usar dtype en lugar de torch_dtype (deprecado)
                         "low_cpu_mem_usage": True,
                     }
+                    
+                    # Configurar device_map según la disponibilidad de VRAM
+                    if torch.cuda.is_available():
+                        if use_cpu_offload:
+                            # Estrategia: Cargar completamente en CPU para evitar OOM
+                            # Luego mover capas a GPU bajo demanda durante inferencia
+                            logger.warning(f"Cargando modelo {size} en CPU debido a VRAM insuficiente...")
+                            load_kwargs["device_map"] = "cpu"
+                            load_kwargs["offload_folder"] = str(self.cache_dir / "offload")
+                            
+                            # Crear directorio de offload si no existe
+                            offload_dir = self.cache_dir / "offload"
+                            offload_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            logger.info(f"Configuración CPU offload: device_map=cpu, offload_folder={offload_dir}")
+                        else:
+                            # Cargar completamente en GPU
+                            load_kwargs["device_map"] = "cuda:0"
+                    else:
+                        # Sin GPU, cargar en CPU
+                        load_kwargs["device_map"] = "cpu"
                     
                     model = Qwen3TTSModel.from_pretrained(
                         model_id,
                         **load_kwargs
                     )
                     
+                    # Si cargamos en CPU pero hay GPU disponible, intentar usar GPU para inferencia
+                    if use_cpu_offload and torch.cuda.is_available():
+                        logger.info("Modelo cargado en CPU. Intentando optimizar para GPU...")
+                        try:
+                            # Algunos modelos soportan .to() después de cargar
+                            # o tienen métodos para mover a device específico
+                            if hasattr(model, 'to'):
+                                # Mover solo si el modelo lo permite
+                                logger.info("Moviendo modelo a GPU para inferencia más rápida...")
+                                model = model.to("cuda")
+                        except Exception as move_error:
+                            logger.warning(f"No se pudo mover modelo a GPU: {move_error}")
+                            logger.info("El modelo permanecerá en CPU. Será más lento pero funcionará.")
+                    
                     self._models[cache_key] = model
+                    
+                    # Log de dónde se cargó el modelo
+                    if hasattr(model, 'hf_device_map'):
+                        logger.info(f"Modelo distribuido en dispositivos: {model.hf_device_map}")
+                    
                     logger.info(f"Modelo {model_id} cargado exitosamente")
-                    logger.info(f"Memoria CUDA después de carga: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                    
+                    if torch.cuda.is_available():
+                        logger.info(f"Memoria CUDA después de carga: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                    
                     return self._models[cache_key]
                     
                 except Exception as e:
                     last_error = e
                     error_msg = str(e)
                     logger.error(f"Error cargando modelo {model_id} (intento {attempt + 1}/{max_retries}): {e}")
+                    
+                    # Si es error de memoria CUDA, intentar con CPU offload
+                    if "CUDA out of memory" in error_msg and torch.cuda.is_available() and not use_cpu_offload:
+                        logger.warning("Error de memoria CUDA detectado. Intentando con CPU offload...")
+                        use_cpu_offload = True
+                        # Limpiar memoria antes de reintentar
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                        import time
+                        time.sleep(1)
+                        continue
                     
                     # Si es error de speech_tokenizer, intentar corregir
                     if "speech_tokenizer" in error_msg and "preprocessor_config" in error_msg:

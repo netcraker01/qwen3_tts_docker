@@ -307,17 +307,54 @@ def process_cloned_voice_generate_job(job: Job, progress_callback: Callable[[str
         use_voice_defaults = data.get("use_voice_defaults", True)
         generation_params = data.get("generation_params", {})
         
-        progress_callback("loading_voice", 20, "Cargando voz clonada...")
+        progress_callback("loading_voice", 15, "Cargando voz clonada...")
         
         voice = voice_manager.get_voice(voice_id)
         if not voice:
             raise ValueError(f"Voz clonada no encontrada: {voice_id}")
         
+        # Intentar obtener el prompt de memoria
         prompt_data = voice_manager.get_prompt(voice_id)
-        if not prompt_data:
-            raise ValueError("Prompt de voz no disponible. Recree la voz.")
         
-        progress_callback("loading_model", 35, "Cargando modelo...")
+        # Si no está en memoria, recrearlo desde el audio de referencia
+        if not prompt_data:
+            logger.info(f"Prompt no está en memoria para voz {voice_id}, recreando desde audio de referencia...")
+            progress_callback("recreating_prompt", 25, "Recreando prompt de voz desde audio de referencia...")
+            
+            # Verificar si tenemos el audio de referencia guardado
+            import os
+            from pathlib import Path
+            
+            storage_dir = Path("/app/data")
+            voice_audio_path = storage_dir / "voice_audio" / f"{voice_id}.wav"
+            
+            if voice_audio_path.exists():
+                logger.info(f"Audio de referencia encontrado en: {voice_audio_path}")
+                
+                # Recrear el prompt usando el servicio TTS
+                temp_prompt_id = tts_service.create_voice_clone_prompt(
+                    ref_audio_path=str(voice_audio_path),
+                    ref_text=voice.ref_text,
+                    model_size=model_size
+                )
+                
+                # Obtener el prompt recién creado
+                prompt_data = tts_service._voice_clone_prompts.get(temp_prompt_id)
+                
+                if prompt_data:
+                    # Guardar el prompt en el voice_manager para futuros usos
+                    voice_manager._prompts[voice_id] = prompt_data
+                    logger.info(f"Prompt recreado exitosamente para voz {voice_id}")
+                else:
+                    raise ValueError("No se pudo recrear el prompt de voz desde el audio de referencia")
+            else:
+                logger.error(f"No se encontró el audio de referencia en: {voice_audio_path}")
+                raise ValueError(
+                    "Prompt de voz no disponible en memoria y no se encontró el audio de referencia guardado. "
+                    "Es posible que el servidor se haya reiniciado. Por favor, recree la voz clonada."
+                )
+        
+        progress_callback("loading_model", 40, "Cargando modelo...")
         
         language = language or voice.language
         
@@ -327,14 +364,14 @@ def process_cloned_voice_generate_job(job: Job, progress_callback: Callable[[str
         else:
             final_generation_params = generation_params
         
-        progress_callback("preparing", 45, "Preparando generación...")
+        progress_callback("preparing", 50, "Preparando generación...")
         
-        # Crear prompt temporal
+        # Crear prompt temporal en el servicio TTS
         temp_prompt_id = f"temp_{voice_id}_{int(time.time())}"
         tts_service._voice_clone_prompts[temp_prompt_id] = prompt_data
         
         try:
-            progress_callback("generating", 65, "Generando audio...")
+            progress_callback("generating", 70, "Generando audio...")
             start_time = time.time()
             
             audio_result = tts_service.generate_voice_clone(
@@ -345,7 +382,7 @@ def process_cloned_voice_generate_job(job: Job, progress_callback: Callable[[str
                 generation_params=final_generation_params
             )
             
-            progress_callback("encoding", 85, "Codificando audio...")
+            progress_callback("encoding", 90, "Codificando audio...")
             
             audio_base64 = tts_service.audio_to_base64(audio_result, output_format)
             

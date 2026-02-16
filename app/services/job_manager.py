@@ -8,13 +8,18 @@ import time
 import uuid
 import asyncio
 import logging
-from typing import Dict, Optional, Callable, Any, AsyncGenerator
+from typing import Dict, Optional, Callable, Any, AsyncGenerator, Set
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime, timedelta
 import threading
 
 logger = logging.getLogger(__name__)
+
+
+class JobCancellationError(Exception):
+    """Excepción lanzada cuando un job es cancelado."""
+    pass
 
 
 class JobStatus(str, Enum):
@@ -24,6 +29,7 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"       # Completado exitosamente
     FAILED = "failed"             # Falló
     CANCELLED = "cancelled"       # Cancelado por el usuario
+    KILLED = "killed"             # Matado forzosamente
 
 
 @dataclass
@@ -55,6 +61,10 @@ class Job:
     # Resultado
     result: Optional[Dict] = None
     error: Optional[str] = None
+    
+    # Control de cancelación
+    _cancelled: bool = field(default=False)
+    _processing_task: Optional[asyncio.Task] = field(default=None)
     
     # Callbacks de progreso
     _progress_callbacks: list = field(default_factory=list)
@@ -107,6 +117,16 @@ class Job:
         with self._lock:
             if callback in self._progress_callbacks:
                 self._progress_callbacks.remove(callback)
+    
+    def is_cancelled(self) -> bool:
+        """Verifica si el job ha sido marcado para cancelación."""
+        with self._lock:
+            return self._cancelled or self.status in [JobStatus.CANCELLED, JobStatus.KILLED]
+    
+    def request_cancellation(self):
+        """Marca el job para ser cancelado."""
+        with self._lock:
+            self._cancelled = True
 
 
 class JobManager:
@@ -214,20 +234,47 @@ class JobManager:
                 logger.error(f"{worker_id}: Error en loop: {e}")
     
     async def _process_job_internal(self, job: Job, processor: Callable):
-        """Procesa un job internamente."""
-        try:
+        """Procesa un job internamente con soporte para cancelación."""
+        # Crear la tarea de procesamiento para poder cancelarla
+        loop = asyncio.get_event_loop()
+        
+        async def process_with_cancellation():
+            """Wrapper que verifica cancelación durante el procesamiento."""
+            # Verificar si fue cancelado antes de empezar
+            if job.is_cancelled():
+                raise JobCancellationError("Job cancelado antes de iniciar")
+            
             job.status = JobStatus.PROCESSING
             job.update_progress("starting", 0, "Iniciando procesamiento...")
             
-            # Función de progreso que actualiza el job
+            # Función de progreso que verifica cancelación
             def progress_callback(stage: str, percent: int, message: str):
+                if job.is_cancelled():
+                    raise JobCancellationError("Job cancelado durante el procesamiento")
                 job.update_progress(stage, percent, message)
             
-            # Ejecutar el procesador
-            result = await asyncio.get_event_loop().run_in_executor(
+            # Ejecutar el procesador en thread pool
+            result = await loop.run_in_executor(
                 None,
                 lambda: processor(job, progress_callback)
             )
+            
+            return result
+        
+        # Guardar referencia a la tarea para poder cancelarla
+        job._processing_task = asyncio.create_task(process_with_cancellation())
+        
+        try:
+            # Esperar a que termine la tarea
+            result = await job._processing_task
+            
+            # Verificar si fue cancelado durante la ejecución
+            if job.is_cancelled():
+                job.status = JobStatus.KILLED
+                job.error = "Job cancelado durante el procesamiento"
+                job.update_progress("killed", 0, "Job cancelado")
+                logger.info(f"Job cancelado: {job.id}")
+                return
             
             # Marcar como completado
             job.result = result
@@ -235,11 +282,27 @@ class JobManager:
             job.update_progress("completed", 100, "Procesamiento completado")
             logger.info(f"Job completado: {job.id}")
             
+        except asyncio.CancelledError:
+            # Job fue cancelado externamente (vía kill_job)
+            job.status = JobStatus.KILLED
+            job.error = "Job matado por el usuario"
+            job.update_progress("killed", 0, "Job matado")
+            logger.info(f"Job matado: {job.id}")
+            
+        except JobCancellationError as e:
+            # Job fue cancelado durante el procesamiento
+            job.status = JobStatus.CANCELLED
+            job.error = str(e)
+            job.update_progress("cancelled", 0, "Job cancelado")
+            logger.info(f"Job cancelado: {job.id} - {e}")
+            
         except Exception as e:
             logger.error(f"Error procesando job {job.id}: {e}")
             job.status = JobStatus.FAILED
             job.error = str(e)
             job.update_progress("error", 0, f"Error: {str(e)}")
+        finally:
+            job._processing_task = None
     
     def create_job(self, job_type: str, request_data: Dict[str, Any]) -> Job:
         """
@@ -286,18 +349,112 @@ class JobManager:
         return [j.to_dict() for j in jobs]
     
     def cancel_job(self, job_id: str) -> bool:
-        """Cancela un job pendiente o en proceso."""
+        """
+        Cancela un job pendiente o en proceso (cancelación suave).
+        Para jobs en ejecución, se recomienda usar kill_job().
+        """
         job = self._jobs.get(job_id)
         if not job:
             return False
         
-        if job.status in [JobStatus.PENDING, JobStatus.PROCESSING]:
+        if job.status == JobStatus.PENDING:
+            # Si está pendiente, simplemente marcar como cancelado
             job.status = JobStatus.CANCELLED
+            job.request_cancellation()
             job.updated_at = time.time()
-            logger.info(f"Job cancelado: {job_id}")
+            logger.info(f"Job cancelado (pendiente): {job_id}")
+            return True
+        
+        if job.status == JobStatus.PROCESSING:
+            # Si está en proceso, marcar para cancelación
+            job.request_cancellation()
+            logger.info(f"Job marcado para cancelación (en ejecución): {job_id}")
             return True
         
         return False
+    
+    async def kill_job(self, job_id: str, timeout: float = 5.0) -> Dict[str, Any]:
+        """
+        Mata un job en ejecución o pendiente de forma forzosa.
+        
+        Args:
+            job_id: ID del job a matar
+            timeout: Tiempo máximo de espera para que el job termine gracefulmente
+            
+        Returns:
+            Diccionario con el resultado de la operación
+        """
+        job = self._jobs.get(job_id)
+        if not job:
+            return {"success": False, "error": f"Job no encontrado: {job_id}"}
+        
+        # Si ya está en estado final, no hacer nada
+        if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.KILLED]:
+            return {
+                "success": False, 
+                "error": f"El job ya está en estado final: {job.status.value}",
+                "job_status": job.status.value
+            }
+        
+        # Marcar para cancelación
+        job.request_cancellation()
+        previous_status = job.status
+        
+        if job.status == JobStatus.PENDING:
+            # Si está pendiente, simplemente marcar como killed
+            job.status = JobStatus.KILLED
+            job.updated_at = time.time()
+            job.error = "Job matado por el usuario (estaba en cola)"
+            logger.info(f"Job matado (pendiente): {job_id}")
+            return {
+                "success": True, 
+                "message": f"Job {job_id} matado exitosamente (estaba pendiente)",
+                "previous_status": previous_status.value,
+                "current_status": job.status.value
+            }
+        
+        if job.status == JobStatus.PROCESSING:
+            # Si está en ejecución, intentar cancelar la tarea
+            if job._processing_task and not job._processing_task.done():
+                try:
+                    job._processing_task.cancel()
+                    # Esperar un poco a que se cancele
+                    await asyncio.wait_for(
+                        asyncio.shield(job._processing_task), 
+                        timeout=timeout
+                    )
+                except asyncio.CancelledError:
+                    logger.info(f"Job {job_id} cancelado correctamente")
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout esperando cancelación del job {job_id}")
+                except Exception as e:
+                    logger.error(f"Error cancelando job {job_id}: {e}")
+            
+            # Marcar como killed independientemente del resultado
+            job.status = JobStatus.KILLED
+            job.updated_at = time.time()
+            job.error = "Job matado por el usuario"
+            logger.info(f"Job matado (en ejecución): {job_id}")
+            return {
+                "success": True, 
+                "message": f"Job {job_id} matado exitosamente (estaba en ejecución)",
+                "previous_status": previous_status.value,
+                "current_status": job.status.value
+            }
+        
+        # Si está cancelado, actualizar a killed
+        if job.status == JobStatus.CANCELLED:
+            job.status = JobStatus.KILLED
+            job.updated_at = time.time()
+            logger.info(f"Job matado (previamente cancelado): {job_id}")
+            return {
+                "success": True, 
+                "message": f"Job {job_id} matado exitosamente",
+                "previous_status": previous_status.value,
+                "current_status": job.status.value
+            }
+        
+        return {"success": False, "error": f"Estado no manejado: {job.status.value}"}
     
     def delete_job(self, job_id: str) -> bool:
         """Elimina un job."""
@@ -309,14 +466,14 @@ class JobManager:
         return False
     
     def _cleanup_old_jobs(self):
-        """Limpia jobs antiguos completados o fallidos."""
+        """Limpia jobs antiguos completados, fallidos, cancelados o matados."""
         now = time.time()
         max_age = 3600  # 1 hora
         
         to_delete = []
         for job_id, job in self._jobs.items():
-            # Eliminar jobs completados/fallidos/cancelados con más de 1 hora
-            if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+            # Eliminar jobs completados/fallidos/cancelados/killed con más de 1 hora
+            if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.KILLED]:
                 if now - job.updated_at > max_age:
                     to_delete.append(job_id)
         
@@ -419,6 +576,8 @@ class JobManager:
                 yield f"event: error\ndata: {self._dict_to_json(error_data)}\n\n"
             elif job.status == JobStatus.CANCELLED:
                 yield f"event: cancelled\ndata: {{'status': 'cancelled'}}\n\n"
+            elif job.status == JobStatus.KILLED:
+                yield f"event: killed\ndata: {{'status': 'killed', 'error': '{job.error}'}}\n\n"
                 
         finally:
             job.remove_progress_callback(on_progress)

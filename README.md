@@ -319,28 +319,90 @@ docker-compose up -d
 
 ---
 
+## 💾 Persistencia de Voces Clonadas
+
+Las voces clonadas se almacenan de forma **persistente** usando volúmenes Docker nombrados. Esto significa que:
+
+- ✅ Las voces clonadas **sobreviven** a reinicios del contenedor
+- ✅ Las voces clonadas **sobreviven** a recreaciones del contenedor (`docker-compose up -d`)
+- ✅ Los archivos de audio generados **se mantienen** entre reinicios
+
+### Estructura de almacenamiento
+
+| Volumen | Contenedor | Contenido |
+|---------|-----------|-----------|
+| `qwen3_tts_data` | `/app/data` | Voces clonadas (`cloned_voices.json`) y audios de referencia |
+| `qwen3_tts_output` | `/app/output` | Archivos de audio generados |
+
+### Comandos para gestionar volúmenes
+
+```bash
+# Ver información de los volúmenes
+docker volume ls | grep qwen3
+
+# Ver contenido de los volúmenes
+docker run --rm -v qwen3_tts_data:/data busybox ls -la /data
+docker run --rm -v qwen3_tts_output:/output busybox ls -la /output
+
+# Backup de volúmenes (exportar)
+docker run --rm -v qwen3_tts_data:/data -v $(pwd):/backup busybox tar czf /backup/qwen3_tts_data_backup.tar.gz /data
+docker run --rm -v qwen3_tts_output:/output -v $(pwd):/backup busybox tar czf /backup/qwen3_tts_output_backup.tar.gz /output
+
+# Restaurar backup
+# 1. Detener el servicio
+# 2. Eliminar el volumen: docker volume rm qwen3_tts_data
+# 3. Recrear y restaurar: docker run --rm -v qwen3_tts_data:/data -v $(pwd):/backup busybox tar xzf /backup/qwen3_tts_data_backup.tar.gz -C /
+
+# Eliminar TODOS los datos (⚠️ irreversible)
+docker-compose down -v
+```
+
+### Migrar datos a otro servidor
+
+```bash
+# En el servidor origen - crear backup
+docker run --rm -v qwen3_tts_data:/data -v $(pwd):/backup busybox tar czf /backup/qwen3_tts_data.tar.gz /data
+docker run --rm -v qwen3_tts_output:/output -v $(pwd):/backup busybox tar czf /backup/qwen3_tts_output.tar.gz /output
+
+# Transferir archivos al nuevo servidor
+scp qwen3_tts_*.tar.gz usuario@nuevo-servidor:/ruta/
+
+# En el nuevo servidor - restaurar
+docker run --rm -v qwen3_tts_data:/data -v $(pwd):/backup busybox tar xzf /backup/qwen3_tts_data.tar.gz -C /
+docker run --rm -v qwen3_tts_output:/output -v $(pwd):/backup busybox tar xzf /backup/qwen3_tts_output.tar.gz -C /
+```
+
+---
+
 ## 🛑 Comandos Útiles
 
 ```bash
 # Ver logs
 docker-compose logs -f qwen3-tts
 
-# Reiniciar servicio
+# Reiniciar servicio (datos se mantienen)
 docker-compose restart qwen3-tts
 
-# Detener servicio (conserva datos)
+# Recrear contenedor (datos se mantienen en volúmenes)
+docker-compose up -d --force-recreate
+
+# Detener servicio (conserva datos en volúmenes)
 docker-compose down
 
 # Detener y eliminar todo (⚠️ incluye voces clonadas)
 docker-compose down -v
 
-# Reconstruir imagen completa
+# Reconstruir imagen completa (los datos persisten)
 docker-compose down
 docker-compose build --no-cache
 docker-compose up -d
 
 # Ver uso de recursos
 docker stats qwen3-tts
+
+# Ver información de volúmenes
+docker volume inspect qwen3_tts_data
+docker volume inspect qwen3_tts_output
 ```
 
 ---

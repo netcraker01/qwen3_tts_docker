@@ -93,6 +93,24 @@ class VoiceManager:
             logger.error(f"Error guardando voces: {e}")
             raise
     
+    def _sanitize_voice_id(self, name: str) -> str:
+        """
+        Sanitiza un nombre para usarlo como ID de voz.
+        Reemplaza espacios por guiones bajos y elimina caracteres no válidos.
+        
+        Args:
+            name: Nombre de la voz
+            
+        Returns:
+            ID sanitizado
+        """
+        import re
+        # Convertir a minúsculas y reemplazar espacios por guiones bajos
+        voice_id = name.lower().replace(' ', '_')
+        # Eliminar caracteres no válidos (solo permitir letras, números, guiones y guiones bajos)
+        voice_id = re.sub(r'[^a-z0-9_-]', '', voice_id)
+        return voice_id
+    
     def create_voice(
         self,
         name: str,
@@ -101,7 +119,8 @@ class VoiceManager:
         ref_text: str,
         language: str,
         prompt_data: Any,
-        generation_params: Optional[Dict] = None
+        generation_params: Optional[Dict] = None,
+        ref_audio_bytes: Optional[bytes] = None
     ) -> ClonedVoice:
         """
         Crea una nueva voz clonada y la guarda.
@@ -114,20 +133,52 @@ class VoiceManager:
             language: Idioma principal
             prompt_data: El objeto prompt generado por Qwen3TTS
             generation_params: Parámetros de generación por defecto
+            ref_audio_bytes: Bytes del audio de referencia (opcional, para persistir el audio)
         
         Returns:
             La voz clonada creada
+            
+        Raises:
+            ValueError: Si ya existe una voz con el mismo ID
         """
-        # Generar ID único basado en nombre y timestamp
-        voice_id = f"{name.lower().replace(' ', '_')}_{int(time.time())}"
+        # Generar ID basado solo en el nombre (sanitizado)
+        voice_id = self._sanitize_voice_id(name)
+        
+        # Verificar si ya existe una voz con este ID
+        if voice_id in self.voices:
+            raise ValueError(f"Ya existe una voz con el ID '{voice_id}'. Use un nombre diferente o elimine la voz existente primero.")
         
         now = time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Guardar el audio de referencia si se proporcionan los bytes
+        saved_audio_path = ref_audio_path
+        if ref_audio_bytes:
+            voice_audio_dir = self.storage_dir / "voice_audio"
+            voice_audio_dir.mkdir(parents=True, exist_ok=True)
+            saved_audio_path = str(voice_audio_dir / f"{voice_id}.wav")
+            
+            with open(saved_audio_path, 'wb') as f:
+                f.write(ref_audio_bytes)
+            logger.info(f"Audio de referencia guardado en: {saved_audio_path}")
+        elif ref_audio_path.startswith("/tmp") or ref_audio_path.startswith("data:audio"):
+            # Si es un archivo temporal o data URL, intentar copiarlo
+            try:
+                if ref_audio_path.startswith("/tmp") and os.path.exists(ref_audio_path):
+                    voice_audio_dir = self.storage_dir / "voice_audio"
+                    voice_audio_dir.mkdir(parents=True, exist_ok=True)
+                    saved_audio_path = str(voice_audio_dir / f"{voice_id}.wav")
+                    
+                    import shutil
+                    shutil.copy2(ref_audio_path, saved_audio_path)
+                    logger.info(f"Audio de referencia copiado a: {saved_audio_path}")
+            except Exception as e:
+                logger.warning(f"No se pudo copiar el audio de referencia: {e}")
         
         voice = ClonedVoice(
             id=voice_id,
             name=name,
             description=description,
-            ref_audio_path=ref_audio_path,
+            ref_audio_path=saved_audio_path,
             ref_text=ref_text,
             language=language,
             prompt_data=prompt_data,
