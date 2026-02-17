@@ -3,6 +3,7 @@ Qwen3-TTS Service API
 Servicio de Texto a Voz basado en Qwen3-TTS
 """
 import os
+import time
 import logging
 from contextlib import asynccontextmanager
 
@@ -12,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
+
+from app.schemas.requests import RootResponse, HealthResponse
 
 # Configuración de logging
 logging.basicConfig(
@@ -87,7 +90,13 @@ if os.path.exists("/app/web"):
     logger.info("Interfaz web servida en /web")
 
 
-@app.get("/")
+@app.get(
+    "/",
+    response_model=RootResponse,
+    summary="Información del servicio",
+    description="Endpoint raíz con información básica del servicio y URLs útiles.",
+    tags=["System"]
+)
 async def root():
     """Endpoint raíz con información básica del servicio."""
     return {
@@ -99,7 +108,13 @@ async def root():
     }
 
 
-@app.get("/api/v1/health")
+@app.get(
+    "/api/v1/health",
+    response_model=HealthResponse,
+    summary="Health check",
+    description="Endpoint de verificación de salud del servicio con información del sistema.",
+    tags=["System"]
+)
 async def health_check():
     """Endpoint de verificación de salud del servicio."""
     from app.dependencies import get_tts_service
@@ -107,13 +122,11 @@ async def health_check():
     tts_service = get_tts_service()
     health_status = {
         "status": "healthy",
+        "timestamp": time.time(),
         "cuda_available": torch.cuda.is_available(),
-        "models_loaded": tts_service.get_loaded_models(),
-        "default_model_size": DEFAULT_MODEL_SIZE
+        "models_ready": len(tts_service.get_loaded_models()) > 0,
+        "cache_dir": MODEL_CACHE_DIR
     }
-    
-    if torch.cuda.is_available():
-        health_status["gpu_name"] = torch.cuda.get_device_name(0)
     
     return health_status
 

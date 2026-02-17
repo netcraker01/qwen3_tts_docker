@@ -20,7 +20,18 @@ from app.schemas.requests import (
     CreateClonedVoiceRequest,
     UpdateClonedVoiceRequest,
     ClonedVoiceListResponse,
+    ClonedVoiceDetailResponse,
+    ClonedVoiceCreateResponse,
+    ClonedVoiceUpdateResponse,
+    ClonedVoiceDeleteResponse,
+    ClonedVoicesStatsResponse,
     GenerateFromClonedVoiceRequest,
+    HealthResponse,
+    RootResponse,
+    SpeakersResponse,
+    LanguagesResponse,
+    ModelsStatusResponse,
+    DownloadModelResponse,
     AVAILABLE_SPEAKERS,
     SUPPORTED_LANGUAGES,
     MODEL_SIZES,
@@ -50,6 +61,7 @@ model_manager = get_model_manager()
 
 @router.get(
     "/models/status",
+    response_model=ModelsStatusResponse,
     summary="Estado de todos los modelos",
     description="Obtiene el estado de instalación de todos los modelos disponibles.",
     tags=["Models"]
@@ -66,6 +78,7 @@ async def get_models_status():
 
 @router.get(
     "/models/status/{model_size}/{model_type}",
+    response_model=dict,
     summary="Estado de un modelo específico",
     description="Obtiene el estado de un modelo específico (ej: 1.7B/voice_clone).",
     tags=["Models"]
@@ -85,6 +98,7 @@ async def get_model_status(model_size: str, model_type: str):
 
 @router.post(
     "/models/download/{model_size}/{model_type}",
+    response_model=DownloadModelResponse,
     summary="Descargar un modelo",
     description="Inicia la descarga de un modelo específico si no está instalado.",
     tags=["Models"]
@@ -116,6 +130,7 @@ async def download_model(model_size: str, model_type: str):
 
 @router.get(
     "/health",
+    response_model=HealthResponse,
     summary="Health check",
     description="Verifica que el servicio está funcionando y retorna información básica.",
     tags=["System"]
@@ -454,6 +469,7 @@ async def get_models_info():
 
 @router.get(
     "/speakers",
+    response_model=SpeakersResponse,
     summary="Listar speakers disponibles",
     description="Retorna la lista de personajes preestablecidos disponibles para Custom Voice.",
     tags=["Information"]
@@ -482,6 +498,7 @@ async def get_speakers():
 
 @router.get(
     "/languages",
+    response_model=LanguagesResponse,
     summary="Listar idiomas soportados",
     description="Retorna la lista de idiomas soportados por el servicio.",
     tags=["Information"]
@@ -557,7 +574,18 @@ async def generate_custom_voice_file(request: CustomVoiceRequest):
     "/download/{filename}",
     summary="Descargar archivo de audio",
     description="Descarga un archivo de audio generado previamente.",
-    tags=["Utilities"]
+    tags=["Utilities"],
+    responses={
+        200: {
+            "description": "Archivo de audio",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "audio/ogg": {"schema": {"type": "string", "format": "binary"}}
+            }
+        },
+        404: {"description": "Archivo no encontrado"}
+    }
 )
 async def download_file(filename: str):
     """
@@ -585,7 +613,7 @@ voice_manager = VoiceManager(storage_dir="/app/data")
 
 @router.post(
     "/cloned-voices",
-    response_model=dict,
+    response_model=ClonedVoiceCreateResponse,
     summary="Crear voz clonada persistente",
     description="""
     Crea una voz clonada y la guarda para uso futuro.
@@ -669,7 +697,7 @@ async def create_cloned_voice(request: CreateClonedVoiceRequest):
 
 @router.get(
     "/cloned-voices",
-    response_model=dict,
+    response_model=ClonedVoiceListResponse,
     summary="Listar voces clonadas",
     description="Obtiene la lista de todas las voces clonadas almacenadas.",
     tags=["Cloned Voices Management"]
@@ -687,7 +715,7 @@ async def list_cloned_voices():
 
 @router.get(
     "/cloned-voices/{voice_id}",
-    response_model=dict,
+    response_model=ClonedVoiceDetailResponse,
     summary="Obtener información de una voz clonada",
     description="Obtiene los detalles de una voz clonada específica.",
     tags=["Cloned Voices Management"]
@@ -707,7 +735,7 @@ async def get_cloned_voice(voice_id: str):
 
 @router.put(
     "/cloned-voices/{voice_id}",
-    response_model=dict,
+    response_model=ClonedVoiceUpdateResponse,
     summary="Actualizar voz clonada",
     description="Actualiza el nombre, descripción o parámetros de generación de una voz clonada.",
     tags=["Cloned Voices Management"]
@@ -735,7 +763,7 @@ async def update_cloned_voice(voice_id: str, request: UpdateClonedVoiceRequest):
 
 @router.delete(
     "/cloned-voices/{voice_id}",
-    response_model=dict,
+    response_model=ClonedVoiceDeleteResponse,
     summary="Eliminar voz clonada",
     description="Elimina permanentemente una voz clonada almacenada.",
     tags=["Cloned Voices Management"]
@@ -924,7 +952,7 @@ async def generate_from_cloned_voice(request: GenerateFromClonedVoiceRequest):
 
 @router.get(
     "/cloned-voices/stats",
-    response_model=dict,
+    response_model=ClonedVoicesStatsResponse,
     summary="Estadísticas de voces clonadas",
     description="Obtiene estadísticas de uso de las voces clonadas.",
     tags=["Cloned Voices Management"]

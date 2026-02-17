@@ -2,7 +2,7 @@
 Pydantic models for API requests and responses.
 """
 
-from typing import Optional, Literal, List, Dict, Any
+from typing import Optional, Literal, List, Dict, Any, Union
 from pydantic import BaseModel, Field, validator
 
 # ============================================================
@@ -366,12 +366,116 @@ class ModelsInfoResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """
-    Response de verificación de salud.
+    Response de verificación de salud del sistema.
     """
-    status: str = Field(description="Estado del servicio")
-    version: str = Field(description="Versión del servicio")
-    cuda_available: bool = Field(description="Si CUDA está disponible")
-    models_loaded: list = Field(description="Modelos cargados en memoria")
+    status: str = Field(
+        description="Estado del servicio: healthy, degraded, unhealthy",
+        example="healthy"
+    )
+    timestamp: float = Field(
+        description="Timestamp de la verificación en segundos desde epoch",
+        example=1704067200.0
+    )
+    cuda_available: bool = Field(
+        description="Si CUDA/GPU está disponible",
+        example=True
+    )
+    models_ready: bool = Field(
+        description="Si los modelos esenciales están disponibles",
+        example=True
+    )
+    cache_dir: str = Field(
+        description="Directorio de caché de modelos",
+        example="/app/models"
+    )
+
+
+class RootResponse(BaseModel):
+    """
+    Response del endpoint raíz.
+    """
+    service: str = Field(
+        description="Nombre del servicio",
+        example="Qwen3-TTS Service API"
+    )
+    version: str = Field(
+        description="Versión del servicio",
+        example="1.0.0"
+    )
+    status: str = Field(
+        description="Estado del servicio",
+        example="running"
+    )
+    docs: str = Field(
+        description="URL de la documentación Swagger",
+        example="/docs"
+    )
+    health: str = Field(
+        description="URL del health check",
+        example="/api/v1/health"
+    )
+
+
+class SpeakerInfo(BaseModel):
+    """
+    Información de un speaker preestablecido.
+    """
+    gender: str = Field(description="Género de la voz", example="Female")
+    language: str = Field(description="Idioma principal", example="Korean")
+    style: str = Field(description="Estilo de la voz", example="Natural")
+
+
+class SpeakersResponse(BaseModel):
+    """
+    Response con lista de speakers disponibles.
+    """
+    speakers: List[str] = Field(
+        description="Lista de nombres de speakers",
+        example=["Vivian", "Serena", "Sohee"]
+    )
+    details: Dict[str, SpeakerInfo] = Field(
+        description="Detalles de cada speaker"
+    )
+
+
+class LanguagesResponse(BaseModel):
+    """
+    Response con lista de idiomas soportados.
+    """
+    languages: List[str] = Field(
+        description="Lista de idiomas soportados",
+        example=["Auto", "Spanish", "English", "Chinese"]
+    )
+    notes: str = Field(
+        description="Notas sobre el uso de idiomas",
+        example="Use 'Auto' para detección automática del idioma"
+    )
+
+
+class ModelStatusInfo(BaseModel):
+    """
+    Información del estado de un modelo.
+    """
+    model_id: str = Field(description="ID del modelo", example="Qwen/Qwen3-TTS-12Hz-1.7B-Base")
+    installed: bool = Field(description="Si el modelo está instalado", example=True)
+    path: Optional[str] = Field(default=None, description="Ruta del modelo", example="/app/models/Qwen3-TTS-12Hz-1.7B-Base")
+    size_gb: Optional[float] = Field(default=None, description="Tamaño en GB", example=3.5)
+
+
+class ModelsStatusResponse(BaseModel):
+    """
+    Response con estado de todos los modelos.
+    """
+    models: Dict[str, Dict[str, ModelStatusInfo]] = Field(description="Estado de todos los modelos")
+    cache_dir: str = Field(description="Directorio de caché", example="/app/models")
+
+
+class DownloadModelResponse(BaseModel):
+    """
+    Response de descarga de modelo.
+    """
+    success: bool = Field(description="Si la descarga fue exitosa", example=True)
+    message: str = Field(description="Mensaje descriptivo", example="Modelo 1.7B/voice_clone descargado correctamente")
 
 
 # ============================================================
@@ -414,6 +518,39 @@ class ClonedVoiceListResponse(BaseModel):
     """Respuesta con lista de voces clonadas."""
     voices: List[ClonedVoiceInfo]
     total: int
+
+
+class ClonedVoiceDetailResponse(BaseModel):
+    """Respuesta con detalle de una voz clonada."""
+    voice: ClonedVoiceInfo
+
+
+class ClonedVoiceCreateResponse(BaseModel):
+    """Respuesta al crear una voz clonada."""
+    success: bool = Field(description="Si la creación fue exitosa")
+    voice: ClonedVoiceInfo
+    message: str = Field(description="Mensaje descriptivo")
+
+
+class ClonedVoiceUpdateResponse(BaseModel):
+    """Respuesta al actualizar una voz clonada."""
+    success: bool
+    voice: ClonedVoiceInfo
+    message: str
+
+
+class ClonedVoiceDeleteResponse(BaseModel):
+    """Respuesta al eliminar una voz clonada."""
+    success: bool
+    message: str
+
+
+class ClonedVoicesStatsResponse(BaseModel):
+    """Respuesta con estadísticas de voces clonadas."""
+    total_voices: int = Field(description="Total de voces clonadas")
+    total_generations: int = Field(description="Total de generaciones realizadas")
+    most_used_voice: Optional[str] = Field(default=None, description="ID de la voz más usada")
+    storage_size_mb: float = Field(description="Tamaño total en MB")
 
 
 class GenerateFromClonedVoiceRequest(GenerationParams):
@@ -464,23 +601,23 @@ class CreateJobRequest(BaseModel):
 
 class JobProgressInfo(BaseModel):
     """Información de progreso de un job."""
-    stage: str = Field(description="Etapa actual del procesamiento")
-    percent: int = Field(description="Porcentaje de progreso (0-100)")
-    message: str = Field(description="Mensaje descriptivo")
-    timestamp: float = Field(description="Timestamp de la última actualización")
+    stage: str = Field(description="Etapa actual del procesamiento", example="generating")
+    percent: int = Field(description="Porcentaje de progreso (0-100)", example=75)
+    message: str = Field(description="Mensaje descriptivo", example="Generando audio...")
+    timestamp: float = Field(description="Timestamp de la última actualización", example=1704067200.0)
 
 
 class JobInfo(BaseModel):
     """Información de un job."""
-    id: str = Field(description="ID único del job")
-    type: str = Field(description="Tipo de job")
-    status: str = Field(description="Estado: pending, processing, completed, failed, cancelled, killed")
-    created_at: float = Field(description="Timestamp de creación")
-    updated_at: float = Field(description="Timestamp de última actualización")
+    id: str = Field(description="ID único del job", example="job_abc123")
+    type: str = Field(description="Tipo de job", example="custom_voice")
+    status: str = Field(description="Estado: pending, processing, completed, failed, cancelled, killed", example="processing")
+    created_at: float = Field(description="Timestamp de creación", example=1704067200.0)
+    updated_at: float = Field(description="Timestamp de última actualización", example=1704067200.0)
     progress: JobProgressInfo = Field(description="Progreso actual")
     result: Optional[Dict] = Field(default=None, description="Resultado si está completado")
     error: Optional[str] = Field(default=None, description="Mensaje de error si falló")
-    elapsed_seconds: float = Field(description="Tiempo transcurrido en segundos")
+    elapsed_seconds: float = Field(description="Tiempo transcurrido en segundos", example=5.3)
 
 
 class CreateJobResponse(BaseModel):
@@ -501,3 +638,57 @@ class JobListResponse(BaseModel):
 class JobStatusResponse(BaseModel):
     """Response con estado de un job."""
     job: JobInfo = Field(description="Información del job")
+
+
+class JobResultResponse(BaseModel):
+    """Response con resultado de un job completado."""
+    success: bool = Field(description="Si el job fue exitoso")
+    job_id: str = Field(description="ID del job")
+    result: Dict = Field(description="Resultado del job")
+
+
+class JobCancelResponse(BaseModel):
+    """Response de cancelación de job."""
+    success: bool = Field(description="Si la cancelación fue exitosa")
+    message: str = Field(description="Mensaje descriptivo")
+    job_status: str = Field(description="Estado actual del job")
+
+
+class JobKillResponse(BaseModel):
+    """Response de kill de job."""
+    success: bool = Field(description="Si el kill fue exitoso")
+    message: str = Field(description="Mensaje descriptivo")
+    job_id: str = Field(description="ID del job")
+    previous_status: str = Field(description="Estado anterior del job")
+    current_status: str = Field(description="Estado actual del job")
+
+
+class QueueStatusResponse(BaseModel):
+    """Response con estado de la cola de jobs."""
+    queue: Dict[str, int] = Field(description="Estado de la cola: pending, processing, max_concurrent")
+    jobs: Dict[str, int] = Field(description="Estadísticas de jobs: total, completed, failed")
+    system_status: str = Field(description="Estado del sistema: available, busy", example="available")
+
+
+class JobDeleteResponse(BaseModel):
+    """Response de eliminación de job."""
+    success: bool = Field(description="Si la eliminación fue exitosa")
+    message: str = Field(description="Mensaje descriptivo")
+
+
+# ============================================================
+# SCHEMAS - DESCARGA DE ARCHIVOS
+# ============================================================
+
+class DownloadFileResponse(BaseModel):
+    """
+    Response para descarga de archivos de audio.
+    Nota: Este endpoint retorna el archivo directamente, no un JSON.
+    """
+    filename: str = Field(description="Nombre del archivo", example="audio_generated.wav")
+    content_type: str = Field(description="Tipo MIME del archivo", example="audio/wav")
+    
+    class Config:
+        json_schema_extra = {
+            "description": "Este endpoint retorna el archivo de audio directamente como binary/octet-stream"
+        }

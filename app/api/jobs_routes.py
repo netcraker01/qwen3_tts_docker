@@ -20,7 +20,12 @@ from app.schemas.requests import (
     CreateJobResponse,
     JobStatusResponse,
     JobListResponse,
-    JobInfo
+    JobInfo,
+    JobResultResponse,
+    JobCancelResponse,
+    JobKillResponse,
+    JobDeleteResponse,
+    QueueStatusResponse
 )
 from app.services.job_manager import job_manager, JobStatus
 from app.services.job_processors import get_processor
@@ -98,6 +103,7 @@ async def create_job(request: CreateJobRequest):
 
 @router.get(
     "/jobs/queue/status",
+    response_model=QueueStatusResponse,
     summary="Estado de la cola de jobs",
     description="""
     Obtiene información sobre el estado actual de la cola de procesamiento.
@@ -191,7 +197,19 @@ async def get_job_status(job_id: str):
     });
     ```
     """,
-    tags=["Async Jobs"]
+    tags=["Async Jobs"],
+    responses={
+        200: {
+            "description": "Stream de eventos SSE",
+            "content": {
+                "text/event-stream": {
+                    "schema": {"type": "string"},
+                    "example": """event: progress\ndata: {"stage": "generating", "percent": 50, "message": "Generando audio..."}\n\nevent: completed\ndata: {"result": {"audio_base64": "...", "duration_seconds": 3.5}}\n\n"""
+                }
+            }
+        },
+        404: {"description": "Job no encontrado"}
+    }
 )
 async def stream_job_progress(job_id: str):
     """
@@ -251,6 +269,7 @@ async def list_jobs(status: Optional[str] = None):
 
 @router.post(
     "/jobs/{job_id}/cancel",
+    response_model=JobCancelResponse,
     summary="Cancelar un job (suave)",
     description="""
     Cancela un job que está pendiente o en proceso.
@@ -279,15 +298,16 @@ async def cancel_job(job_id: str):
             )
     
     job = job_manager.get_job(job_id)
-    return {
-        "success": True,
-        "message": f"Job {job_id} marcado para cancelación",
-        "job_status": job.status.value if job else "unknown"
-    }
+    return JobCancelResponse(
+        success=True,
+        message=f"Job {job_id} marcado para cancelación",
+        job_status=job.status.value if job else "unknown"
+    )
 
 
 @router.post(
     "/jobs/{job_id}/kill",
+    response_model=JobKillResponse,
     summary="Matar un job (forzoso)",
     description="""
     Mata un job de forma forzosa, deteniéndolo inmediatamente.
@@ -314,6 +334,10 @@ async def kill_job(job_id: str, timeout: float = 5.0):
         job_id: ID del job a matar
         timeout: Tiempo máximo de espera para cancelación graceful (default: 5s)
     """
+    # Obtener el estado anterior antes del kill
+    job = job_manager.get_job(job_id)
+    previous_status = job.status.value if job else "unknown"
+    
     result = await job_manager.kill_job(job_id, timeout=timeout)
     
     if not result.get("success", False):
@@ -325,11 +349,22 @@ async def kill_job(job_id: str, timeout: float = 5.0):
         else:
             raise HTTPException(status_code=400, detail=error_msg)
     
-    return result
+    # Obtener el estado actual después del kill
+    job = job_manager.get_job(job_id)
+    current_status = job.status.value if job else "unknown"
+    
+    return JobKillResponse(
+        success=True,
+        message=result.get("message", f"Job {job_id} eliminado"),
+        job_id=job_id,
+        previous_status=previous_status,
+        current_status=current_status
+    )
 
 
 @router.delete(
     "/jobs/{job_id}",
+    response_model=JobDeleteResponse,
     summary="Eliminar un job",
     description="Elimina permanentemente un job y sus datos asociados.",
     tags=["Async Jobs"]
@@ -343,14 +378,15 @@ async def delete_job(job_id: str):
     if not success:
         raise HTTPException(status_code=404, detail=f"Job no encontrado: {job_id}")
     
-    return {
-        "success": True,
-        "message": f"Job {job_id} eliminado exitosamente"
-    }
+    return JobDeleteResponse(
+        success=True,
+        message=f"Job {job_id} eliminado exitosamente"
+    )
 
 
 @router.get(
     "/jobs/{job_id}/result",
+    response_model=JobResultResponse,
     summary="Obtener resultado de un job completado",
     description="""
     Obtiene el resultado de un job que ha sido completado.
@@ -373,8 +409,8 @@ async def get_job_result(job_id: str):
             detail=f"El job no está completado. Estado actual: {job.status.value}"
         )
     
-    return {
-        "success": True,
-        "job_id": job_id,
-        "result": job.result
-    }
+    return JobResultResponse(
+        success=True,
+        job_id=job_id,
+        result=job.result
+    )
