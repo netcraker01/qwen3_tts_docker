@@ -114,21 +114,50 @@ curl http://localhost:8080/api/v1/speakers
 
 ### Paso 4: Acceder a la Documentación
 
-- **API Docs (Swagger UI)**: http://localhost:8080/docs
-- **API Docs (ReDoc)**: http://localhost:8080/redoc
-- **Health Check**: http://localhost:8080/api/v1/health
-- **Web UI**: http://localhost:8081 (si habilitaste tts-webui)
+La API incluye documentación completa generada automáticamente con Swagger/OpenAPI:
+
+| Recurso | URL | Descripción |
+|---------|-----|-------------|
+| **Swagger UI** | http://localhost:8080/docs | Interfaz interactiva para probar endpoints |
+| **ReDoc** | http://localhost:8080/redoc | Documentación estática más legible |
+| **OpenAPI JSON** | http://localhost:8080/openapi.json | Especificación OpenAPI 3.1.0 |
+| **Health Check** | http://localhost:8080/api/v1/health | Estado del servicio |
+| **Web UI** | http://localhost:8081 | Interfaz web (si habilitaste tts-webui) |
+
+**Características de la documentación:**
+- ✅ **26 endpoints** documentados con ejemplos
+- ✅ **37 schemas** Pydantic con validaciones
+- ✅ **8 categorías** organizadas por tags
+- ✅ Descripciones detalladas en español
+- ✅ Ejemplos de requests y responses
+- ✅ Prueba interactiva directamente desde el navegador
 
 ---
 
 ## 📡 Endpoints API
 
-### Health & Info
+La API está organizada en 8 categorías con **26 endpoints** y **37 schemas** documentados:
+
+### System
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
+| `/` | GET | Información del servicio |
 | `/api/v1/health` | GET | Estado del servicio |
+
+### Models
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
 | `/api/v1/models` | GET | Información de modelos |
+| `/api/v1/models/status` | GET | Estado de todos los modelos |
+| `/api/v1/models/status/{size}/{type}` | GET | Estado de un modelo específico |
+| `/api/v1/models/download/{size}/{type}` | POST | Descargar un modelo |
+
+### Information
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
 | `/api/v1/speakers` | GET | Listar speakers disponibles |
 | `/api/v1/languages` | GET | Listar idiomas soportados |
 
@@ -138,11 +167,36 @@ curl http://localhost:8080/api/v1/speakers
 |----------|--------|-------------|
 | `/api/v1/tts/custom` | POST | Voz con personaje preestablecido |
 | `/api/v1/tts/design` | POST | Voz por descripción de texto |
-| `/api/v1/tts/clone/url` | POST | Clonar desde URL de audio |
-| `/api/v1/tts/clone/upload` | POST | Clonar subiendo archivo |
 | `/api/v1/tts/custom/file` | POST | Generar y descargar archivo |
 
-### Jobs Asíncronos (Cola FIFO) ⭐ NUEVO
+### Voice Cloning
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/tts/clone/url` | POST | Clonar desde URL de audio |
+| `/api/v1/tts/clone/upload` | POST | Clonar subiendo archivo |
+
+### Cloned Voices Management
+
+Gestión persistente de voces clonadas para reutilización:
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/cloned-voices` | GET | Listar voces clonadas |
+| `/api/v1/cloned-voices` | POST | Crear voz clonada persistente |
+| `/api/v1/cloned-voices/{id}` | GET | Obtener información de una voz |
+| `/api/v1/cloned-voices/{id}` | PUT | Actualizar voz clonada |
+| `/api/v1/cloned-voices/{id}` | DELETE | Eliminar voz clonada |
+| `/api/v1/cloned-voices/stats` | GET | Estadísticas de voces clonadas |
+| `/api/v1/tts/cloned-voice/generate` | POST | Generar audio usando voz clonada guardada |
+
+### Utilities
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/download/{filename}` | GET | Descargar archivo de audio generado |
+
+### Async Jobs
 
 Para operaciones largas que pueden causar timeout, usa los endpoints de jobs asíncronos:
 
